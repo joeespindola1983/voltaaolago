@@ -1266,7 +1266,7 @@ export default function App() {
             
             <div style={{ background: 'white', padding: '15px', borderRadius: '12px', marginBottom: '20px', border: '1px solid #e2e8f0' }}>
               <label style={labelStyle}>Controle da Prova</label>
-              <div style={{ display: 'flex', gap: '10px' }}>
+              <div style={{ display: 'flex', gap: '10px', marginBottom: '10px' }}>
                 {!raceStartTime ? (
                   <button 
                     onClick={() => { if (window.confirm('Iniciar o cronômetro da prova para TODOS?')) axios.post(`${API_URL}/api/config`, { raceStartTime: Date.now() }); }} 
@@ -1281,19 +1281,19 @@ export default function App() {
                   >
                     Resetar Cronômetro
                   </button>
-                  </div>
-                  <button 
-                  onClick={async () => { 
-                    if (window.confirm('CUIDADO! Isso vai ZERAR TODOS os barcos, apagar todos os rastros e tempos de trecho. Tem certeza absoluta?')) {
-                      await axios.post(`${API_URL}/api/admin/reset_all`);
-                      fetchBoats();
-                    }
-                  }} 
-                  style={{ ...startBtnStyle, background: '#000', marginTop: '10px' }}
-                  >
-                  Limpeza Total (Reset Geral)
-                  </button>
-                  </div>
+                )}
+              </div>
+              <button 
+                onClick={async () => { 
+                  if (window.confirm('CUIDADO! Isso vai ZERAR TODOS os barcos, apagar todos os rastros e tempos de trecho. Tem certeza absoluta?')) {
+                    await axios.post(`${API_URL}/api/admin/reset_all`);
+                    fetchBoats();
+                  }
+                }} 
+                style={{ ...startBtnStyle, background: '#000' }}
+              >
+                Limpeza Total (Reset Geral)
+              </button>
             </div>
 
             <div style={{ background: 'white', padding: '15px', borderRadius: '12px', marginBottom: '20px', border: '1px solid #e2e8f0' }}>
