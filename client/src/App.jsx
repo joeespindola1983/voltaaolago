@@ -4,7 +4,7 @@ import { MapContainer, TileLayer, Marker, Popup, useMap, useMapEvents, Polyline,
 const { BaseLayer } = LayersControl;
 import L from 'leaflet';
 import axios from 'axios';
-import { Map as MapIcon, Play, RefreshCw, Ship, Anchor, Users, Navigation, Activity, LogOut, AlertTriangle, Trash2, UserMinus, X, Battery, Trophy, Download } from 'lucide-react';
+import { Map as MapIcon, Play, RefreshCw, Ship, Anchor, Users, Navigation, Activity, LogOut, AlertTriangle, Trash2, UserMinus, X, Battery, Trophy, Download, Search } from 'lucide-react';
 import { Capacitor } from '@capacitor/core';
 import { Geolocation } from '@capacitor/geolocation';
 import { Device } from '@capacitor/device';
@@ -48,14 +48,24 @@ const clusterIcon = (count) => L.divIcon({
   className: '', iconSize: [44, 44], iconAnchor: [22, 22]
 });
 
-function BoatLayer({ boats, trackingBoatId, setSelectedMapBoatId, setClusterModalBoats, currentTime }) {
+function BoatLayer({ boats, trackingBoatId, setSelectedMapBoatId, setClusterModalBoats, currentTime, categoryFilter = 'Geral', searchQuery = '' }) {
   const map = useMap();
   const [zoom, setZoom] = useState(map.getZoom());
   useMapEvents({ zoomend: () => setZoom(map.getZoom()) });
 
   const groups = [];
   const processedIds = new Set();
-  const active = boats.filter(b => b.lat && b.lng && (currentTime - new Date(b.last_updated).getTime()) < 3600000);
+  
+  // Filtragem Dinâmica
+  const filtered = boats.filter(b => {
+    const matchesCategory = categoryFilter === 'Geral' || b.category === categoryFilter;
+    const matchesSearch = !searchQuery || 
+      b.name.toLowerCase().includes(searchQuery.toLowerCase()) || 
+      (b.nickname && b.nickname.toLowerCase().includes(searchQuery.toLowerCase()));
+    return matchesCategory && matchesSearch;
+  });
+
+  const active = filtered.filter(b => b.lat && b.lng && (currentTime - new Date(b.last_updated).getTime()) < 3600000);
   const clusterThreshold = 0.0004 * Math.pow(2, 16 - zoom);
 
   active.forEach(b => {
@@ -253,6 +263,8 @@ export default function App() {
   const [selectedMapBoatId, setSelectedMapBoatId] = useState(null);
   const [clusterModalBoats, setClusterModalBoats] = useState(null);
   const [waypoints, setWaypoints] = useState([]);
+  const [mapCategoryFilter, setMapCategoryFilter] = useState('Geral');
+  const [mapSearchQuery, setMapSearchQuery] = useState('');
 
   useEffect(() => { localStorage.setItem('vtl_view', view); }, [view]);
   const [boatName, setBoatName] = useState('');
@@ -991,7 +1003,7 @@ export default function App() {
                 
                 {/* Botões de Controle do Mapa */}
                 <div style={{ position: 'absolute', top: '70px', right: '10px', zIndex: 1000, display: 'flex', flexDirection: 'column', gap: '10px' }}>
-                  <button onClick={() => { setSelectedMapBoatId(null); }} style={{ ...navBtnStyle, background: 'white', color: '#1e3a8a', width: '40px', height: '40px', borderRadius: '8px', boxShadow: '0 2px 5px rgba(0,0,0,0.2)', padding: 0, justifyContent: 'center' }}>
+                  <button onClick={() => { setSelectedMapBoatId(null); setMapCategoryFilter('Geral'); setMapSearchQuery(''); }} style={{ ...navBtnStyle, background: 'white', color: '#1e3a8a', width: '40px', height: '40px', borderRadius: '8px', boxShadow: '0 2px 5px rgba(0,0,0,0.2)', padding: 0, justifyContent: 'center' }}>
                     <MapIcon size={20} />
                   </button>
                   {isTracking && (
@@ -1002,8 +1014,33 @@ export default function App() {
                 </div>
 
                 <MapAutoZoom boats={boats} selectedMapBoatId={selectedMapBoatId} focusBoatId={isTracking ? trackingBoatId : null} />
-                <BoatLayer boats={boats} trackingBoatId={trackingBoatId} setSelectedMapBoatId={setSelectedMapBoatId} setClusterModalBoats={setClusterModalBoats} currentTime={currentTime} />
+                <BoatLayer boats={boats} trackingBoatId={trackingBoatId} setSelectedMapBoatId={setSelectedMapBoatId} setClusterModalBoats={setClusterModalBoats} currentTime={currentTime} categoryFilter={mapCategoryFilter} searchQuery={mapSearchQuery} />
               </MapContainer>
+
+              {/* Barra de Busca e Filtro de Categoria no Mapa */}
+              <div style={{ position: 'absolute', top: raceStartTime ? '70px' : '10px', left: '10px', zIndex: 1000, display: 'flex', flexDirection: 'column', gap: '8px', width: isLandscape ? '300px' : 'calc(100% - 70px)' }}>
+                <div style={{ position: 'relative', display: 'flex', alignItems: 'center' }}>
+                  <Search size={16} style={{ position: 'absolute', left: '12px', color: '#64748b' }} />
+                  <input 
+                    placeholder="Buscar barco ou @nick..." 
+                    value={mapSearchQuery}
+                    onChange={e => setMapSearchQuery(e.target.value)}
+                    style={{ ...inputStyle, marginBottom: 0, paddingLeft: '35px', background: 'white', border: 'none', boxShadow: '0 4px 10px rgba(0,0,0,0.1)', height: '40px', fontSize: '13px', borderRadius: '10px' }}
+                  />
+                  {mapSearchQuery && <X size={16} onClick={() => setMapSearchQuery('')} style={{ position: 'absolute', right: '12px', color: '#94a3b8', cursor: 'pointer' }} />}
+                </div>
+                
+                <select 
+                  value={mapCategoryFilter} 
+                  onChange={e => setMapCategoryFilter(e.target.value)}
+                  style={{ ...inputStyle, marginBottom: 0, background: 'white', border: 'none', boxShadow: '0 4px 10px rgba(0,0,0,0.1)', height: '35px', fontSize: '11px', fontWeight: 'bold', color: '#1e3a8a', width: 'fit-content', padding: '0 15px', borderRadius: '8px' }}
+                >
+                  <option value="Geral">Todas as Categorias</option>
+                  {Object.values(BOAT_CATEGORIES).flat().map(cat => (
+                    <option key={cat} value={cat}>{cat}</option>
+                  ))}
+                </select>
+              </div>
             </div>
             {selectedMapBoatId && boats.find(b => Number(b.id) === Number(selectedMapBoatId)) && (
               <div style={{ 
@@ -1165,8 +1202,21 @@ export default function App() {
                         onDeleteWaypoint={(id) => axios.delete(`${API_URL}/api/waypoints/${id}`)} 
                       />
                       <MapAutoZoom boats={boats} selectedMapBoatId={selectedMapBoatId} focusBoatId={trackingBoatId} />
-                      <BoatLayer boats={boats} trackingBoatId={trackingBoatId} setSelectedMapBoatId={setSelectedMapBoatId} setClusterModalBoats={setClusterModalBoats} currentTime={currentTime} />
+                      <BoatLayer boats={boats} trackingBoatId={trackingBoatId} setSelectedMapBoatId={setSelectedMapBoatId} setClusterModalBoats={setClusterModalBoats} currentTime={currentTime} categoryFilter={mapCategoryFilter} searchQuery={mapSearchQuery} />
                     </MapContainer>
+
+                    {/* Barra de Busca e Filtro de Categoria no Mapa de Transmissão */}
+                    <div style={{ position: 'absolute', top: '10px', left: '10px', zIndex: 1000, display: 'flex', flexDirection: 'column', gap: '8px', width: isLandscape ? '250px' : 'calc(100% - 60px)' }}>
+                      <div style={{ position: 'relative', display: 'flex', alignItems: 'center' }}>
+                        <Search size={14} style={{ position: 'absolute', left: '10px', color: '#64748b' }} />
+                        <input 
+                          placeholder="Buscar..." 
+                          value={mapSearchQuery}
+                          onChange={e => setMapSearchQuery(e.target.value)}
+                          style={{ ...inputStyle, marginBottom: 0, paddingLeft: '30px', background: 'rgba(255,255,255,0.9)', border: 'none', boxShadow: '0 2px 8px rgba(0,0,0,0.1)', height: '35px', fontSize: '12px', borderRadius: '8px' }}
+                        />
+                      </div>
+                    </div>
 
                     {/* Indicador de Sincronização Inteligente com Countdown */}
                     <div style={{ position: 'absolute', bottom: '20px', left: '50%', transform: 'translateX(-50%)', zIndex: 1000, background: 'rgba(255,255,255,0.95)', padding: '12px 24px', borderRadius: '30px', boxShadow: '0 4px 15px rgba(0,0,0,0.15)', display: 'flex', alignItems: 'center', gap: '10px', border: '1px solid #e2e8f0', whiteSpace: 'nowrap' }}>
