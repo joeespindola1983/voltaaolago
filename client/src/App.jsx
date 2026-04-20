@@ -3,7 +3,7 @@ import { io } from 'socket.io-client';
 import { MapContainer, TileLayer, Marker, Popup, useMap, useMapEvents, Polyline } from 'react-leaflet';
 import L from 'leaflet';
 import axios from 'axios';
-import { Map as MapIcon, Play, RefreshCw, Ship, Anchor, Users, Navigation, Activity, LogOut, AlertTriangle, Trash2, UserMinus, X } from 'lucide-react';
+import { Map as MapIcon, Play, RefreshCw, Ship, Anchor, Users, Navigation, Activity, LogOut, AlertTriangle, Trash2, UserMinus, X, Battery } from 'lucide-react';
 
 // --- CONFIGURAÇÕES ---
 const BACKEND_URL = 'https://voltaaolago-backend.onrender.com';
@@ -327,21 +327,29 @@ export default function App() {
     if (watchIdRef.current) navigator.geolocation.clearWatch(watchIdRef.current);
 
     const watchId = navigator.geolocation.watchPosition(
-      (pos) => {
+      async (pos) => {
         if (!isTrackingRef.current) return;
         
         const now = Date.now();
-        // Respeita o relayTimeout configurado (evita spam de dados)
         if (!lastSentRef.current || (now - lastSentRef.current) >= (relayTimeoutRef.current * 60000)) {
           setSyncStatus('sending');
+          
+          let batteryLevel = 100;
+          try {
+            if ('getBattery' in navigator) {
+              const battery = await navigator.getBattery();
+              batteryLevel = Math.round(battery.level * 100);
+            }
+          } catch (e) {}
+
           socket.emit('update_location', { 
             boatId: id, 
             lat: pos.coords.latitude, 
             lng: pos.coords.longitude,
-            speed: pos.coords.speed // Metros por segundo
+            speed: pos.coords.speed,
+            batteryLevel
           });
           lastSentRef.current = now;
-          // O setSyncStatus('ok') virá via socket no listener de location_changed
         }
       },
       (err) => { 
@@ -365,7 +373,14 @@ export default function App() {
   const BoatDetails = ({ boat, onClose }) => (
     <div style={{ flex: '0 0 45%', background: 'white', borderTop: '2px solid #e2e8f0', padding: '15px 20px', overflowY: 'auto' }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '10px' }}>
-        <h2 style={{ margin: 0, fontSize: '20px' }}>{boat.name}</h2>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+          <h2 style={{ margin: 0, fontSize: '20px' }}>{boat.name}</h2>
+          {boat.battery_level !== undefined && (
+            <div style={{ display: 'flex', alignItems: 'center', gap: '4px', fontSize: '12px', color: boat.battery_level < 20 ? '#ef4444' : '#64748b', fontWeight: 'bold' }}>
+              <Battery size={14} color={boat.battery_level < 20 ? '#ef4444' : '#64748b'} /> {boat.battery_level}%
+            </div>
+          )}
+        </div>
         <button onClick={onClose} style={{ background: '#f1f5f9', border: 'none', padding: '5px 10px', borderRadius: '8px', fontSize: '12px' }}>Fechar</button>
       </div>
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '8px', marginBottom: '15px' }}>
@@ -449,6 +464,11 @@ export default function App() {
                             <div style={{ fontWeight: 'bold', color: '#1e3a8a', display: 'flex', alignItems: 'center', gap: '6px' }}>
                               {b.name} 
                               {isOnline && <span style={{ fontSize: '9px', background: '#ecfdf5', color: '#059669', padding: '1px 4px', borderRadius: '4px' }}>LIVE</span>}
+                              {b.battery_level !== undefined && (
+                                <span style={{ fontSize: '9px', color: b.battery_level < 20 ? '#ef4444' : '#64748b', display: 'flex', alignItems: 'center', gap: '2px' }}>
+                                  <Battery size={10} /> {b.battery_level}%
+                                </span>
+                              )}
                             </div>
                             <div style={{ fontSize: '12px', color: '#64748b' }}>@{b.nickname} • {b.type}</div>
                           </div>
