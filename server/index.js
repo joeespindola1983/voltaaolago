@@ -61,6 +61,7 @@ async function initDb() {
     await client.query(`ALTER TABLE boats ADD COLUMN IF NOT EXISTS heading DOUBLE PRECISION DEFAULT 0;`);
     await client.query(`ALTER TABLE boats ADD COLUMN IF NOT EXISTS category VARCHAR(100) DEFAULT 'Geral';`);
     await client.query(`ALTER TABLE boats ADD COLUMN IF NOT EXISTS battery_level INTEGER DEFAULT 100;`);
+    await client.query(`ALTER TABLE boats ADD COLUMN IF NOT EXISTS sos_active BOOLEAN DEFAULT false;`);
     await client.query(`ALTER TABLE boats ADD COLUMN IF NOT EXISTS athletes JSONB DEFAULT '[]'::jsonb;`);
     await client.query(`ALTER TABLE boats ADD COLUMN IF NOT EXISTS exchanges JSONB DEFAULT '[]'::jsonb;`);
     
@@ -254,11 +255,25 @@ app.delete('/api/boats/:id', async (req, res) => {
 app.post('/api/boats/:id/reset', async (req, res) => {
   const { id } = req.params;
   try {
-    await pool.query('UPDATE boats SET distance = 0, speed = 0, lat = NULL, lng = NULL WHERE id = $1', [id]);
+    await pool.query('UPDATE boats SET distance = 0, speed = 0, lat = NULL, lng = NULL, sos_active = false WHERE id = $1', [id]);
     await pool.query('DELETE FROM location_history WHERE boat_id = $1', [id]);
     const updated = await pool.query('SELECT * FROM boats WHERE id = $1', [id]);
     io.emit('boat_updated', updated.rows[0]);
     res.json({ success: true });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Ativar/Desativar SOS
+app.post('/api/boats/:id/sos', async (req, res) => {
+  const { id } = req.params;
+  const { active } = req.body;
+  try {
+    const result = await pool.query('UPDATE boats SET sos_active = $1 WHERE id = $2 RETURNING *', [active, id]);
+    io.emit('boat_updated', result.rows[0]);
+    if (active) io.emit('sos_alert', { boatName: result.rows[0].name, boatId: id });
+    res.json(result.rows[0]);
   } catch (err) {
     res.status(500).json({ error: err.message });
   }

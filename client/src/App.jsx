@@ -16,19 +16,20 @@ const BOAT_CATEGORIES = {
   'Outros': ['Surfski', 'Caiaque', 'Stand Up']
 };
 
-const boatIcon = (name, status = 'online', isMe = false, customColor, heading = 0) => {
+const boatIcon = (name, status = 'online', isMe = false, customColor, heading = 0, isSos = false) => {
   const statusColors = { online: '#2563eb', warning: '#f59e0b', lost: '#64748b' };
-  const baseColor = customColor || (isMe ? '#10b981' : statusColors[status] || statusColors.online);
+  const baseColor = isSos ? '#ef4444' : (customColor || (isMe ? '#10b981' : statusColors[status] || statusColors.online));
+  const animation = isSos ? 'pulse 0.5s infinite' : 'none';
   
   return L.divIcon({
     html: `<div style="display: flex; flex-direction: column; align-items: center; width: 100px;">
-            <div style="background-color: ${baseColor}; border-radius: 50%; width: 42px; height: 42px; display: flex; align-items: center; justify-content: center; border: 3px solid white; box-shadow: 0 4px 10px rgba(0,0,0,0.4); ${isMe ? 'outline: 3px solid #10b981; outline-offset: 2px;' : ''}; transition: transform 0.5s ease; transform: rotate(${heading}deg);">
+            <div style="background-color: ${baseColor}; border-radius: 50%; width: 42px; height: 42px; display: flex; align-items: center; justify-content: center; border: 3px solid white; box-shadow: 0 4px 10px rgba(0,0,0,0.4); ${isMe ? 'outline: 3px solid #10b981; outline-offset: 2px;' : ''}; transition: transform 0.5s ease; transform: rotate(${heading}deg); animation: ${animation};">
               <svg width="26" height="26" viewBox="0 0 24 24" fill="white">
                 <path d="M12 2L4.5 20.29L5.21 21L12 18L18.79 21L19.5 20.29L12 2Z"/>
               </svg>
             </div>
-            <div style="background: rgba(255,255,255,0.9); padding: 2px 6px; border-radius: 4px; font-size: 10px; font-weight: bold; margin-top: 6px; border: 1px solid #cbd5e1; white-space: nowrap; color: #1e293b; box-shadow: 0 2px 4px rgba(0,0,0,0.1); transform: rotate(0deg);">
-              ${name}
+            <div style="background: ${isSos ? '#ef4444' : 'rgba(255,255,255,0.9)'}; color: ${isSos ? '#fff' : '#1e293b'}; padding: 2px 6px; border-radius: 4px; font-size: 10px; font-weight: bold; margin-top: 6px; border: 1px solid ${isSos ? '#b91c1c' : '#cbd5e1'}; white-space: nowrap; box-shadow: 0 2px 4px rgba(0,0,0,0.1); transform: rotate(0deg);">
+              ${isSos ? '⚠️ SOS: ' : ''}${name}
             </div>
            </div>`,
     className: '', iconSize: [100, 70], iconAnchor: [50, 21], popupAnchor: [0, -20]
@@ -79,7 +80,7 @@ function BoatLayer({ boats, trackingBoatId, setSelectedMapBoatId, setClusterModa
           const diff = (currentTime - new Date(boat.last_updated).getTime()) / 60000;
           const status = diff < 5 ? 'online' : (diff < 10 ? 'warning' : 'lost');
           return (
-            <Marker key={boat.id} position={[boat.lat, boat.lng]} icon={boatIcon(boat.name, status, boat.id === trackingBoatId, boat.color, boat.heading)} eventHandlers={{ click: () => setSelectedMapBoatId(boat.id) }} />
+            <Marker key={boat.id} position={[boat.lat, boat.lng]} icon={boatIcon(boat.name, status, boat.id === trackingBoatId, boat.color, boat.heading, boat.sos_active)} eventHandlers={{ click: () => setSelectedMapBoatId(boat.id) }} />
           );
         }
         return (
@@ -264,6 +265,9 @@ export default function App() {
       setRelayTimeout(data.relayTimeout); 
       relayTimeoutRef.current = data.relayTimeout; 
       setRaceStartTime(data.raceStartTime);
+    });
+    socket.on('sos_alert', (data) => {
+      alert(`🚨 EMERGÊNCIA: O barco ${data.boatName} ativou o SOS!`);
     });
     socket.on('location_changed', (data) => {
       if (isTrackingRef.current && Number(trackingBoatIdRef.current) === Number(data.boatId)) {
@@ -782,7 +786,19 @@ export default function App() {
                       <div style={{ color: '#059669', fontWeight: 'bold', fontSize: '12px' }}>📡 TRANSMITINDO</div>
                       <div style={{ fontSize: '18px', fontWeight: 'bold' }}>{boatName}</div>
                     </div>
-                    <button onClick={() => stopTracking()} style={{ background: '#ef4444', color: 'white', border: 'none', padding: '8px 15px', borderRadius: '10px', fontWeight: 'bold' }}>PARAR</button>
+                    <div style={{ display: 'flex', gap: '8px' }}>
+                      <button 
+                        onClick={async () => {
+                          const currentBoat = boats.find(b => Number(b.id) === Number(trackingBoatId));
+                          const newSosStatus = !currentBoat?.sos_active;
+                          await axios.post(`${API_URL}/api/boats/${trackingBoatId}/sos`, { active: newSosStatus });
+                        }} 
+                        style={{ background: boats.find(b => Number(b.id) === Number(trackingBoatId))?.sos_active ? '#fff' : '#ef4444', color: boats.find(b => Number(b.id) === Number(trackingBoatId))?.sos_active ? '#ef4444' : '#fff', border: '2px solid #ef4444', padding: '8px 15px', borderRadius: '10px', fontWeight: 'bold', fontSize: '14px', animation: boats.find(b => Number(b.id) === Number(trackingBoatId))?.sos_active ? 'pulse 0.5s infinite' : 'none' }}
+                      >
+                        {boats.find(b => Number(b.id) === Number(trackingBoatId))?.sos_active ? 'CANCELAR SOS' : '🚨 SOS'}
+                      </button>
+                      <button onClick={() => stopTracking()} style={{ background: '#475569', color: 'white', border: 'none', padding: '8px 15px', borderRadius: '10px', fontWeight: 'bold' }}>PARAR</button>
+                    </div>
                   </div>
                   
                   <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '8px', marginBottom: '12px' }}>
