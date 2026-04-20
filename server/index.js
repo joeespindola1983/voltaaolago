@@ -60,6 +60,17 @@ async function initDb() {
     await client.query(`ALTER TABLE boats ADD COLUMN IF NOT EXISTS athletes JSONB DEFAULT '[]'::jsonb;`);
     await client.query(`ALTER TABLE boats ADD COLUMN IF NOT EXISTS exchanges JSONB DEFAULT '[]'::jsonb;`);
     
+    // Tabela para armazenar o rastro dos barcos
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS location_history (
+        id SERIAL PRIMARY KEY,
+        boat_id INTEGER REFERENCES boats(id) ON DELETE CASCADE,
+        lat DOUBLE PRECISION NOT NULL,
+        lng DOUBLE PRECISION NOT NULL,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      );
+    `);
+    
     client.release();
     console.log("Tabelas prontas e atualizadas.");
   } catch (err) {
@@ -107,8 +118,19 @@ app.post('/api/config', (req, res) => {
 
 app.get('/api/boats', async (req, res) => {
   try {
-    const result = await pool.query('SELECT * FROM boats WHERE active = true ORDER BY name ASC');
-    res.json(result.rows);
+    const boatsResult = await pool.query('SELECT * FROM boats WHERE active = true ORDER BY name ASC');
+    const boats = boatsResult.rows;
+
+    // Para cada barco, buscar os últimos 30 pontos de rastro
+    for (let boat of boats) {
+      const historyResult = await pool.query(
+        'SELECT lat, lng FROM location_history WHERE boat_id = $1 ORDER BY created_at DESC LIMIT 30',
+        [boat.id]
+      );
+      boat.trail = historyResult.rows.reverse(); // Ordem cronológica para o Leaflet
+    }
+
+    res.json(boats);
   } catch (err) {
     res.status(500).json({ error: 'Erro no Banco', details: err.message });
   }
@@ -280,6 +302,12 @@ io.on('connection', (socket) => {
       await pool.query(
         'UPDATE boats SET lat = $1, lng = $2, distance = $3, speed = $4, last_updated = CURRENT_TIMESTAMP WHERE id = $5',
         [lat, lng, distance, currentSpeed, boatId]
+      );
+
+      // Salvar no histórico para o rastro
+      await pool.query(
+        'INSERT INTO location_history (boat_id, lat, lng) VALUES ($1, $2, $3)',
+        [boatId, lat, lng]
       );
       
       io.emit('location_changed', { boatId, lat, lng, distance, speed: currentSpeed, lastUpdated: new Date() });

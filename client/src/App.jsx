@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { io } from 'socket.io-client';
-import { MapContainer, TileLayer, Marker, Popup, useMap, useMapEvents } from 'react-leaflet';
+import { MapContainer, TileLayer, Marker, Popup, useMap, useMapEvents, Polyline } from 'react-leaflet';
 import L from 'leaflet';
 import axios from 'axios';
 import { Map as MapIcon, Play, RefreshCw, Ship, Anchor, Users, Navigation, Activity, LogOut, AlertTriangle, Trash2, UserMinus, X } from 'lucide-react';
@@ -63,6 +63,15 @@ function BoatLayer({ boats, trackingBoatId, setSelectedMapBoatId, setClusterModa
 
   return (
     <>
+      {active.map(b => (
+        b.trail && b.trail.length > 1 && (
+          <Polyline 
+            key={`trail-${b.id}`} 
+            positions={b.trail.map(t => [t.lat, t.lng])} 
+            pathOptions={{ color: b.color || '#2563eb', weight: 3, opacity: 0.6, dashArray: '5, 10' }} 
+          />
+        )
+      ))}
       {groups.map(group => {
         const { anchor, members } = group;
         if (members.length === 1) {
@@ -233,7 +242,13 @@ export default function App() {
       }
       setBoats(prev => {
         if (!prev.find(b => Number(b.id) === Number(data.boatId))) { fetchBoats(); return prev; }
-        return prev.map(b => Number(b.id) === Number(data.boatId) ? { ...b, ...data, last_updated: data.lastUpdated } : b);
+        return prev.map(b => {
+          if (Number(b.id) === Number(data.boatId)) {
+            const newTrail = [...(b.trail || []), { lat: data.lat, lng: data.lng }].slice(-30);
+            return { ...b, ...data, trail: newTrail, last_updated: data.lastUpdated };
+          }
+          return b;
+        });
       });
     });
     socket.on('boat_updated', (updatedBoat) => {
