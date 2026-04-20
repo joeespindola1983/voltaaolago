@@ -104,6 +104,9 @@ export default function App() {
   const [crewInput, setCrewInput] = useState('');
   const [isTracking, setIsTracking] = useState(false);
   const [trackingBoatId, setTrackingBoatId] = useState(null);
+  const [lastSuccessfulUpdate, setLastSuccessfulUpdate] = useState(null);
+  const isTrackingRef = useRef(false);
+  const trackingBoatIdRef = useRef(null);
   const [currentTime, setCurrentTime] = useState(Date.now());
   const [relayTimeout, setRelayTimeout] = useState(1);
   const relayTimeoutRef = useRef(1);
@@ -121,28 +124,34 @@ export default function App() {
     return () => { clearInterval(timer); clearInterval(fetchTimer); };
   }, []);
 
+  const selectedMapBoatIdRef = useRef(null);
+  useEffect(() => { selectedMapBoatIdRef.current = selectedMapBoatId; }, [selectedMapBoatId]);
+
   useEffect(() => {
     fetchBoats();
     socket.on('config_updated', (data) => { setRelayTimeout(data.relayTimeout); relayTimeoutRef.current = data.relayTimeout; });
     socket.on('location_changed', (data) => {
+      if (isTrackingRef.current && Number(trackingBoatIdRef.current) === Number(data.boatId)) {
+        setLastSuccessfulUpdate(Date.now());
+      }
       setBoats(prev => {
-        if (!prev.find(b => b.id === data.boatId)) { fetchBoats(); return prev; }
-        return prev.map(b => b.id === data.boatId ? { ...b, ...data, last_updated: data.lastUpdated } : b);
+        if (!prev.find(b => Number(b.id) === Number(data.boatId))) { fetchBoats(); return prev; }
+        return prev.map(b => Number(b.id) === Number(data.boatId) ? { ...b, ...data, last_updated: data.lastUpdated } : b);
       });
     });
     socket.on('boat_updated', (updatedBoat) => {
       setBoats(prev => {
-        if (prev.find(b => b.id === updatedBoat.id)) return prev.map(b => b.id === updatedBoat.id ? { ...b, ...updatedBoat } : b);
+        if (prev.find(b => Number(b.id) === Number(updatedBoat.id))) return prev.map(b => Number(b.id) === Number(updatedBoat.id) ? { ...b, ...updatedBoat } : b);
         return [...prev, updatedBoat];
       });
     });
     socket.on('boat_deleted', (data) => {
-      setBoats(prev => prev.filter(b => b.id !== data.id));
-      if (selectedMapBoatId === data.id) setSelectedMapBoatId(null);
+      setBoats(prev => prev.filter(b => Number(b.id) !== Number(data.id)));
+      if (Number(selectedMapBoatIdRef.current) === Number(data.id)) setSelectedMapBoatId(null);
     });
-    socket.on('control_taken', (data) => { if (isTracking && trackingBoatId === data.boatId) { alert("Controle assumido!"); stopTracking(true); } });
+    socket.on('control_taken', (data) => { if (isTrackingRef.current && Number(trackingBoatIdRef.current) === Number(data.boatId)) { alert("Controle assumido!"); stopTracking(true); } });
     return () => { socket.off('config_updated'); socket.off('location_changed'); socket.off('boat_updated'); socket.off('boat_deleted'); socket.off('control_taken'); };
-  }, [isTracking, trackingBoatId, selectedMapBoatId]);
+  }, []);
 
   const fetchBoats = async () => {
     try { const res = await axios.get(`${API_URL}/api/boats`); setBoats(res.data); } catch (err) { console.error('Erro API:', err); }
@@ -161,37 +170,86 @@ export default function App() {
       if ('wakeLock' in navigator) wakeLockRef.current = await navigator.wakeLock.request('screen');
       const audio = new Audio('data:audio/wav;base64,UklGRigAAABXQVZFZm10IBIAAAABAAEARKwAAIhYAQACABAAAABkYXRhAgAAAAEA');
       audio.loop = true; audio.play().catch(() => {});
-      audioRef.current = audio; setTrackingBoatId(id); setIsTracking(true); trackLocation(id);
+      audioRef.current = audio; 
+      setTrackingBoatId(id); 
+      trackingBoatIdRef.current = id;
+      setIsTracking(true); 
+      isTrackingRef.current = true;
+      trackLocation(id);
     } catch (err) { alert('Erro GPS.'); }
   };
 
   const stopTracking = (forceMap = false) => {
-    setIsTracking(false); setTrackingBoatId(null);
+    setIsTracking(false); 
+    isTrackingRef.current = false;
+    setTrackingBoatId(null);
+    trackingBoatIdRef.current = null;
     if (wakeLockRef.current) wakeLockRef.current.release();
     if (audioRef.current) audioRef.current.pause();
     if (forceMap) setView('map'); else window.location.reload();
   };
 
   const trackLocation = (id) => {
+    if (!isTrackingRef.current) return;
     if (!navigator.geolocation) return;
     navigator.geolocation.getCurrentPosition(
       (pos) => {
+        if (!isTrackingRef.current) return;
         socket.emit('update_location', { boatId: id, lat: pos.coords.latitude, lng: pos.coords.longitude });
-        if (isTracking) setTimeout(() => trackLocation(id), relayTimeoutRef.current * 60000);
+        setTimeout(() => trackLocation(id), relayTimeoutRef.current * 60000);
       },
-      (err) => { if (isTracking) setTimeout(() => trackLocation(id), 15000); },
+      (err) => { 
+        if (isTrackingRef.current) setTimeout(() => trackLocation(id), 15000); 
+      },
       { enableHighAccuracy: true, timeout: 25000, maximumAge: 0 }
     );
   };
+
+  const BoatDetails = ({ boat, onClose }) => (
+    <div style={{ flex: '0 0 45%', background: 'white', borderTop: '2px solid #e2e8f0', padding: '15px 20px', overflowY: 'auto' }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '10px' }}>
+        <h2 style={{ margin: 0, fontSize: '20px' }}>{boat.name}</h2>
+        <button onClick={onClose} style={{ background: '#f1f5f9', border: 'none', padding: '5px 10px', borderRadius: '8px', fontSize: '12px' }}>Fechar</button>
+      </div>
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px', marginBottom: '15px' }}>
+        <div style={infoCardStyle}><Navigation size={14} color="#059669" /><div><span style={infoLabel}>KM</span><br/><strong>{boat.distance?.toFixed(2) || 0}</strong></div></div>
+        <div style={infoCardStyle}><Activity size={14} color="#2563eb" /><div><span style={infoLabel}>Sinal</span><br/><strong>{new Date(boat.last_updated).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}</strong></div></div>
+      </div>
+      <div style={{ marginBottom: '15px' }}>
+        <div style={sectionTitleStyle}><Users size={16} /> Tripulação</div>
+        <div style={crewBoxStyle}>{boat.current_crew?.join(', ') || 'Ninguém'}</div>
+      </div>
+      <button onClick={() => { setView('track'); setBoatName(boat.name); setSelectedMapBoatId(null); }} style={{ ...startBtnStyle, marginTop: '10px', background: '#0f172a' }}>Assumir Barco</button>
+    </div>
+  );
 
   return (
     <div style={{ height: '100%', display: 'flex', flexDirection: 'column', background: '#f8fafc' }}>
       <nav style={{ background: '#1e3a8a', color: 'white', padding: '12px 10px', display: 'flex', justifyContent: 'space-around', zIndex: 1000, boxShadow: '0 2px 10px rgba(0,0,0,0.2)' }}>
         <button onClick={() => { setView('map'); setSelectedMapBoatId(null); setClusterModalBoats(null); }} style={navBtnStyle}><MapIcon size={22} /> Mapa</button>
-        <button onClick={() => setView('track')} style={navBtnStyle}><Play size={22} /> Transmitir</button>
+        <button onClick={() => { setView('track'); setSelectedMapBoatId(null); setClusterModalBoats(null); }} style={navBtnStyle}><Play size={22} /> Transmitir</button>
       </nav>
 
       <div style={{ flex: 1, position: 'relative', display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
+        {/* Modal de Barcos Sobrepostos (Global) */}
+        {clusterModalBoats && (
+          <div style={modalOverlayStyle}>
+            <div style={modalContentStyle}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '15px' }}>
+                <h3 style={{ margin: 0 }}>Barcos nesta área</h3>
+                <button onClick={() => setClusterModalBoats(null)} style={{ background: 'none', border: 'none' }}><X size={24} /></button>
+              </div>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                {clusterModalBoats.map(b => (
+                  <button key={b.id} onClick={() => { setSelectedMapBoatId(b.id); setClusterModalBoats(null); }} style={modalButtonStyle}>
+                    <strong>{b.name}</strong> ({b.type})
+                  </button>
+                ))}
+              </div>
+            </div>
+          </div>
+        )}
+
         {view === 'map' && (
           <>
             <div style={{ flex: selectedMapBoatId ? '0 0 55%' : '1 1 100%', transition: 'all 0.3s ease' }}>
@@ -201,42 +259,8 @@ export default function App() {
                 <BoatLayer boats={boats} trackingBoatId={trackingBoatId} setSelectedMapBoatId={setSelectedMapBoatId} setClusterModalBoats={setClusterModalBoats} currentTime={currentTime} />
               </MapContainer>
             </div>
-            
-            {/* Modal de Barcos Sobrepostos */}
-            {clusterModalBoats && (
-              <div style={modalOverlayStyle}>
-                <div style={modalContentStyle}>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '15px' }}>
-                    <h3 style={{ margin: 0 }}>Barcos nesta área</h3>
-                    <button onClick={() => setClusterModalBoats(null)} style={{ background: 'none', border: 'none' }}><X size={24} /></button>
-                  </div>
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
-                    {clusterModalBoats.map(b => (
-                      <button key={b.id} onClick={() => { setSelectedMapBoatId(b.id); setClusterModalBoats(null); }} style={modalButtonStyle}>
-                        <strong>{b.name}</strong> ({b.type})
-                      </button>
-                    ))}
-                  </div>
-                </div>
-              </div>
-            )}
-
-            {selectedMapBoatId && boats.find(b => b.id === selectedMapBoatId) && (
-              <div style={{ flex: '1 1 45%', background: 'white', borderTop: '2px solid #e2e8f0', padding: '15px 20px', overflowY: 'auto' }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '10px' }}>
-                  <h2 style={{ margin: 0, fontSize: '20px' }}>{boats.find(b => b.id === selectedMapBoatId).name}</h2>
-                  <button onClick={() => setSelectedMapBoatId(null)} style={{ background: '#f1f5f9', border: 'none', padding: '5px 10px', borderRadius: '8px', fontSize: '12px' }}>Fechar</button>
-                </div>
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px', marginBottom: '15px' }}>
-                  <div style={infoCardStyle}><Navigation size={14} color="#059669" /><div><span style={infoLabel}>KM</span><br/><strong>{boats.find(b => b.id === selectedMapBoatId).distance?.toFixed(2) || 0}</strong></div></div>
-                  <div style={infoCardStyle}><Activity size={14} color="#2563eb" /><div><span style={infoLabel}>Sinal</span><br/><strong>{new Date(boats.find(b => b.id === selectedMapBoatId).last_updated).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}</strong></div></div>
-                </div>
-                <div style={{ marginBottom: '15px' }}>
-                  <div style={sectionTitleStyle}><Users size={16} /> Tripulação</div>
-                  <div style={crewBoxStyle}>{boats.find(b => b.id === selectedMapBoatId).current_crew?.join(', ') || 'Ninguém'}</div>
-                </div>
-                <button onClick={() => { setView('track'); setBoatName(boats.find(b => b.id === selectedMapBoatId).name); }} style={{ ...startBtnStyle, marginTop: '10px', background: '#0f172a' }}>Assumir Barco</button>
-              </div>
+            {selectedMapBoatId && boats.find(b => Number(b.id) === Number(selectedMapBoatId)) && (
+              <BoatDetails boat={boats.find(b => Number(b.id) === Number(selectedMapBoatId))} onClose={() => setSelectedMapBoatId(null)} />
             )}
           </>
         )}
@@ -273,19 +297,29 @@ export default function App() {
             ) : (
               <>
                 <div style={{ background: '#ecfdf5', padding: '15px 20px', borderBottom: '2px solid #10b981', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                  <div>
-                    <div style={{ color: '#059669', fontWeight: 'bold' }}>📡 TRANSMITINDO</div>
+                  <div style={{ flex: 1 }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                      <div style={{ color: '#059669', fontWeight: 'bold', fontSize: '12px' }}>📡 TRANSMITINDO</div>
+                      {lastSuccessfulUpdate && (
+                        <div style={{ background: '#10b981', color: 'white', padding: '2px 8px', borderRadius: '12px', fontSize: '10px', fontWeight: 'bold' }}>
+                          SYNC OK: {Math.floor((currentTime - lastSuccessfulUpdate) / 60000)} min atrás
+                        </div>
+                      )}
+                    </div>
                     <div style={{ fontSize: '18px', fontWeight: 'bold' }}>{boatName}</div>
                   </div>
                   <button onClick={() => stopTracking()} style={{ background: '#ef4444', color: 'white', border: 'none', padding: '8px 15px', borderRadius: '10px', fontWeight: 'bold' }}>PARAR</button>
                 </div>
-                <div style={{ flex: 1, position: 'relative' }}>
+                <div style={{ flex: selectedMapBoatId ? '0 0 55%' : '1 1 100%', position: 'relative', transition: 'all 0.3s ease' }}>
                   <MapContainer center={[-15.7942, -47.8822]} zoom={13} style={{ height: '100%', width: '100%' }}>
                     <TileLayer url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png" />
-                    <MapAutoZoom boats={boats} focusBoatId={trackingBoatId} />
-                    <BoatLayer boats={boats} trackingBoatId={trackingBoatId} setSelectedMapBoatId={() => {}} setClusterModalBoats={() => {}} currentTime={currentTime} />
+                    <MapAutoZoom boats={boats} selectedMapBoatId={selectedMapBoatId} focusBoatId={trackingBoatId} />
+                    <BoatLayer boats={boats} trackingBoatId={trackingBoatId} setSelectedMapBoatId={setSelectedMapBoatId} setClusterModalBoats={setClusterModalBoats} currentTime={currentTime} />
                   </MapContainer>
                 </div>
+                {selectedMapBoatId && boats.find(b => Number(b.id) === Number(selectedMapBoatId)) && (
+                  <BoatDetails boat={boats.find(b => Number(b.id) === Number(selectedMapBoatId))} onClose={() => setSelectedMapBoatId(null)} />
+                )}
               </>
             )}
           </div>
