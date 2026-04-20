@@ -12,7 +12,7 @@ import { Device } from '@capacitor/device';
 // --- CONFIGURAÇÕES ---
 const isApp = Capacitor.isNativePlatform();
 const BACKEND_URL = 'https://voltaaolago-backend.onrender.com';
-const API_URL = window.location.hostname === 'localhost' ? 'http://localhost:3001' : BACKEND_URL;
+const API_URL = (window.location.hostname === 'localhost' && !isApp) ? 'http://localhost:3001' : BACKEND_URL;
 const socket = io(API_URL);
 
 const BOAT_CATEGORIES = {
@@ -384,6 +384,11 @@ export default function App() {
   }, [selectedMapBoatId]);
 
   useEffect(() => {
+    if (isApp) {
+      Geolocation.requestPermissions().then(status => {
+        if (status.location !== 'granted') alert('O App precisa de permissão de GPS para funcionar!');
+      });
+    }
     fetchBoats();
     fetchWaypoints();
     socket.on('config_updated', (data) => { 

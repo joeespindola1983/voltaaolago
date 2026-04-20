@@ -6,7 +6,11 @@ const { Pool } = require('pg');
 const path = require('path');
 
 const app = express();
-app.use(cors());
+app.use(cors({
+  origin: ['https://voltaaolago.onrender.com', 'http://localhost:5173', 'capacitor://localhost', 'http://localhost'],
+  methods: ['GET', 'POST', 'PUT', 'DELETE'],
+  credentials: true
+}));
 app.use(express.json());
 
 const server = http.createServer(app);
