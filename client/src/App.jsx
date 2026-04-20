@@ -160,6 +160,7 @@ export default function App() {
   const [category, setCategory] = useState('');
   const [boatType, setBoatType] = useState('');
   const [boatColor, setBoatColor] = useState('#2563eb');
+  const [boatCategory, setBoatColorCategory] = useState('Geral');
   const [nickname, setNickname] = useState('');
   const [pin, setPin] = useState('');
   const [athletes, setAthletes] = useState([]);
@@ -445,11 +446,36 @@ export default function App() {
           </div>
         )}
 
+  const [activeRankingCategory, setActiveRankingCategory] = useState('Geral');
+
+...
+
         {view === 'ranking' && (
           <div style={{ padding: '20px', overflowY: 'auto', height: '100%' }}>
-            <h2 style={{ margin: '0 0 20px 0', display: 'flex', alignItems: 'center', gap: '10px' }}><Trophy color="#f59e0b" /> Classificação Geral</h2>
+            <h2 style={{ margin: '0 0 15px 0', display: 'flex', alignItems: 'center', gap: '10px' }}><Trophy color="#f59e0b" /> Classificação</h2>
+            
+            {/* Filtros de Categoria */}
+            <div style={{ display: 'flex', gap: '8px', overflowX: 'auto', paddingBottom: '15px', marginBottom: '15px', borderBottom: '1px solid #e2e8f0' }}>
+              {['Geral', 'OC6 Mista', 'OC6 Open', 'OC6 Master', 'OC6 Feminino', 'V1 / OC1', 'Surfski'].map(cat => (
+                <button 
+                  key={cat} 
+                  onClick={() => setActiveRankingCategory(cat)}
+                  style={{ 
+                    padding: '8px 16px', borderRadius: '20px', border: 'none', whiteSpace: 'nowrap', fontSize: '12px', fontWeight: 'bold',
+                    background: activeRankingCategory === cat ? '#1e3a8a' : '#f1f5f9',
+                    color: activeRankingCategory === cat ? '#fff' : '#64748b'
+                  }}
+                >
+                  {cat}
+                </button>
+              ))}
+            </div>
+
             <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-              {[...boats].sort((a, b) => (b.distance || 0) - (a.distance || 0)).map((b, i) => {
+              {[...boats]
+                .filter(b => activeRankingCategory === 'Geral' || b.category === activeRankingCategory)
+                .sort((a, b) => (b.distance || 0) - (a.distance || 0))
+                .map((b, i) => {
                 const diff = (currentTime - new Date(b.last_updated).getTime()) / 60000;
                 const isOnline = b.lat && b.lng && diff < 5;
                 return (
@@ -461,7 +487,7 @@ export default function App() {
                         {b.name}
                         {isOnline && <div style={{ width: '6px', height: '6px', borderRadius: '50%', background: '#10b981', animation: 'pulse 1s infinite' }} />}
                       </div>
-                      <div style={{ fontSize: '11px', color: '#64748b' }}>@{b.nickname} • {b.type}</div>
+                      <div style={{ fontSize: '11px', color: '#64748b' }}>@{b.nickname} • {b.category}</div>
                     </div>
                     <div style={{ textAlign: 'right' }}>
                       <div style={{ fontWeight: 'bold', fontSize: '16px', color: '#1e3a8a' }}>{b.distance?.toFixed(2) || '0.00'} <span style={{ fontSize: '10px' }}>km</span></div>
@@ -470,7 +496,9 @@ export default function App() {
                   </div>
                 );
               })}
-              {boats.length === 0 && <div style={{ textAlign: 'center', padding: '40px', color: '#64748b' }}>Nenhum barco na disputa ainda.</div>}
+              {boats.filter(b => activeRankingCategory === 'Geral' || b.category === activeRankingCategory).length === 0 && (
+                <div style={{ textAlign: 'center', padding: '40px', color: '#64748b' }}>Nenhum barco nesta categoria.</div>
+              )}
             </div>
           </div>
         )}
@@ -517,10 +545,9 @@ export default function App() {
                           <button onClick={() => {
                             const p = prompt('Digite a SENHA de 4 números:');
                             if (p === b.pin) {
-                              setEditingBoatId(b.id); setBoatName(b.name); setNickname(b.nickname); setPin(b.pin); setAthletes(b.athletes || []); setExchanges(b.exchanges || []); setBoatType(b.type); setBoatColor(b.color || '#2563eb'); setIsRegistering(true);
+                              setEditingBoatId(b.id); setBoatName(b.name); setNickname(b.nickname); setPin(b.pin); setAthletes(b.athletes || []); setExchanges(b.exchanges || []); setBoatType(b.type); setBoatColor(b.color || '#2563eb'); setBoatColorCategory(b.category || 'Geral'); setIsRegistering(true);
                             } else if (p !== null) alert('SENHA incorreta!');
-                          }} style={{ background: '#f1f5f9', border: 'none', padding: '10px 15px', borderRadius: '10px', fontSize: '12px', fontWeight: 'bold' }}>Gerenciar</button>
-                        </div>
+                          }} style={{ background: '#f1f5f9', border: 'none', padding: '10px 15px', borderRadius: '10px', fontSize: '12px', fontWeight: 'bold' }}>Gerenciar</button>                        </div>
                       </div>
                     );
                   })}
@@ -541,6 +568,25 @@ export default function App() {
                 
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr', gap: '10px' }}>
                   <div>
+                    <label style={labelStyle}>CATEGORIA (ex: Mista, Open, Master)</label>
+                    <select style={inputStyle} onChange={(e) => setBoatColorCategory(e.target.value)} value={boatCategory}>
+                      <option value="Geral">Geral</option>
+                      <option value="OC6 Mista">OC6 Mista</option>
+                      <option value="OC6 Open">OC6 Open</option>
+                      <option value="OC6 Master">OC6 Master</option>
+                      <option value="OC6 Feminino">OC6 Feminino</option>
+                      <option value="V1 / OC1">V1 / OC1</option>
+                      <option value="Surfski">Surfski</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label style={labelStyle}>Tipo de Barco</label>
+                    <select style={inputStyle} onChange={(e) => setBoatType(e.target.value)} value={boatType}>
+                      <option value="">Selecione...</option>
+                      {Object.values(BOAT_CATEGORIES).flat().map(t => <option key={t} value={t}>{t}</option>)}
+                    </select>
+                  </div>
+                  <div>
                     <label style={labelStyle}>SENHA (4 números visíveis)</label>
                     <input 
                       type="text" 
@@ -552,13 +598,6 @@ export default function App() {
                       onChange={e => setPin(e.target.value.replace(/[^0-9]/g, ''))} 
                       style={inputStyle} 
                     />
-                  </div>
-                  <div>
-                    <label style={labelStyle}>Tipo de Barco</label>
-                    <select style={inputStyle} onChange={(e) => setBoatType(e.target.value)} value={boatType}>
-                      <option value="">Selecione...</option>
-                      {Object.values(BOAT_CATEGORIES).flat().map(t => <option key={t} value={t}>{t}</option>)}
-                    </select>
                   </div>
                 </div>
 
@@ -613,7 +652,7 @@ export default function App() {
                 <button onClick={async () => {
                   if (!nickname || !boatName || pin.length < 4) return alert('Nickname, Nome e SENHA (4 números) são obrigatórios!');
                   try {
-                    const payload = { name: boatName, type: boatType, nickname, pin, color: boatColor, athletes, exchanges };
+                    const payload = { name: boatName, type: boatType, nickname, pin, color: boatColor, category: boatCategory, athletes, exchanges };
                     if (editingBoatId) {
                       await axios.put(`${API_URL}/api/boats/${editingBoatId}`, payload);
                     } else {

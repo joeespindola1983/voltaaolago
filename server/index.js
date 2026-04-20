@@ -58,6 +58,7 @@ async function initDb() {
     await client.query(`ALTER TABLE boats ADD COLUMN IF NOT EXISTS color VARCHAR(20) DEFAULT '#2563eb';`);
     await client.query(`ALTER TABLE boats ADD COLUMN IF NOT EXISTS speed DOUBLE PRECISION DEFAULT 0;`);
     await client.query(`ALTER TABLE boats ADD COLUMN IF NOT EXISTS heading DOUBLE PRECISION DEFAULT 0;`);
+    await client.query(`ALTER TABLE boats ADD COLUMN IF NOT EXISTS category VARCHAR(100) DEFAULT 'Geral';`);
     await client.query(`ALTER TABLE boats ADD COLUMN IF NOT EXISTS battery_level INTEGER DEFAULT 100;`);
     await client.query(`ALTER TABLE boats ADD COLUMN IF NOT EXISTS athletes JSONB DEFAULT '[]'::jsonb;`);
     await client.query(`ALTER TABLE boats ADD COLUMN IF NOT EXISTS exchanges JSONB DEFAULT '[]'::jsonb;`);
@@ -151,11 +152,11 @@ app.post('/api/boats/auth', async (req, res) => {
 });
 
 app.post('/api/boats', async (req, res) => {
-  const { name, type, nickname, pin, color, athletes, exchanges } = req.body;
+  const { name, type, nickname, pin, color, category, athletes, exchanges } = req.body;
   try {
     const result = await pool.query(
-      'INSERT INTO boats (name, type, nickname, pin, color, athletes, exchanges) VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING *',
-      [name, type, nickname, pin, color || '#2563eb', JSON.stringify(athletes || []), JSON.stringify(exchanges || [])]
+      'INSERT INTO boats (name, type, nickname, pin, color, category, athletes, exchanges) VALUES ($1, $2, $3, $4, $5, $6, $7, $8) RETURNING *',
+      [name, type, nickname, pin, color || '#2563eb', category || 'Geral', JSON.stringify(athletes || []), JSON.stringify(exchanges || [])]
     );
     io.emit('boat_updated', result.rows[0]);
     res.status(201).json(result.rows[0]);
@@ -167,11 +168,11 @@ app.post('/api/boats', async (req, res) => {
 
 app.put('/api/boats/:id', async (req, res) => {
   const { id } = req.params;
-  const { name, type, nickname, pin, color, athletes, exchanges } = req.body;
+  const { name, type, nickname, pin, color, category, athletes, exchanges } = req.body;
   try {
     const result = await pool.query(
-      'UPDATE boats SET name = $1, type = $2, nickname = $3, pin = $4, color = $5, athletes = $6, exchanges = $7 WHERE id = $8 RETURNING *',
-      [name, type, nickname, pin, color, JSON.stringify(athletes || []), JSON.stringify(exchanges || []), id]
+      'UPDATE boats SET name = $1, type = $2, nickname = $3, pin = $4, color = $5, category = $6, athletes = $7, exchanges = $8 WHERE id = $9 RETURNING *',
+      [name, type, nickname, pin, color, category || 'Geral', JSON.stringify(athletes || []), JSON.stringify(exchanges || []), id]
     );
     if (result.rows.length === 0) return res.status(404).json({ error: 'Barco não encontrado' });
     io.emit('boat_updated', result.rows[0]);
