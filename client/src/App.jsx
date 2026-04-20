@@ -77,19 +77,55 @@ function BoatLayer({ boats, trackingBoatId, setSelectedMapBoatId, setClusterModa
 
 function MapAutoZoom({ boats, selectedMapBoatId, focusBoatId }) {
   const map = useMap();
+  const [isFollowing, setIsFollowing] = useState(true);
+
+  // Resetar o follow quando o barco selecionado muda
+  useEffect(() => {
+    setIsFollowing(true);
+  }, [selectedMapBoatId, focusBoatId]);
+
   useEffect(() => {
     const focusId = focusBoatId || selectedMapBoatId;
-    if (focusId) {
-      const b = boats.find(x => x.id === focusId);
-      if (b && b.lat && b.lng) map.setView([b.lat, b.lng], 16, { animate: true });
-    } else {
+    if (focusId && isFollowing) {
+      const b = boats.find(x => Number(x.id) === Number(focusId));
+      if (b && b.lat && b.lng) {
+        map.setView([b.lat, b.lng], 16, { animate: true });
+      }
+    } else if (!focusId) {
       const activeBoats = boats.filter(b => b.lat && b.lng);
       if (activeBoats.length > 0) {
         const bounds = L.latLngBounds(activeBoats.map(b => [b.lat, b.lng]));
         map.fitBounds(bounds, { padding: [80, 80], maxZoom: 15 });
       }
     }
-  }, [boats, map, selectedMapBoatId, focusBoatId]);
+  }, [boats, map, selectedMapBoatId, focusBoatId, isFollowing]);
+
+  // Se o usuário arrastar o mapa, para de seguir o barco temporariamente
+  useMapEvents({
+    dragstart: () => {
+      if (selectedMapBoatId || focusBoatId) setIsFollowing(false);
+    },
+    click: (e) => {
+      // Se clicar no mapa (não num marcador), limpa a seleção
+      // O Leaflet propaga o clique, então verificamos se o clique foi no "container"
+      if (e.originalEvent.target.classList.contains('leaflet-container')) {
+        // Esta lógica será disparada pelo MapEvents abaixo
+      }
+    }
+  });
+
+  return null;
+}
+
+function MapEventHandler({ onMapClick }) {
+  useMapEvents({
+    click: (e) => {
+      // O clique do Leaflet propaga. Verificamos se foi no fundo do mapa.
+      if (e.originalEvent.target.classList.contains('leaflet-container')) {
+        onMapClick();
+      }
+    }
+  });
   return null;
 }
 
@@ -299,6 +335,7 @@ export default function App() {
             <div style={{ flex: selectedMapBoatId ? '0 0 55%' : '1 1 100%', transition: 'all 0.3s ease' }}>
               <MapContainer center={[-15.7942, -47.8822]} zoom={13} style={{ height: '100%', width: '100%' }}>
                 <TileLayer url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png" />
+                <MapEventHandler onMapClick={() => setSelectedMapBoatId(null)} />
                 <MapAutoZoom boats={boats} selectedMapBoatId={selectedMapBoatId} focusBoatId={isTracking ? trackingBoatId : null} />
                 <BoatLayer boats={boats} trackingBoatId={trackingBoatId} setSelectedMapBoatId={setSelectedMapBoatId} setClusterModalBoats={setClusterModalBoats} currentTime={currentTime} />
               </MapContainer>
@@ -350,10 +387,11 @@ export default function App() {
                 <div style={{ flex: selectedMapBoatId ? '0 0 55%' : '1 1 100%', position: 'relative', transition: 'all 0.3s ease' }}>
                   <MapContainer center={[-15.7942, -47.8822]} zoom={13} style={{ height: '100%', width: '100%' }}>
                     <TileLayer url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png" />
+                    <MapEventHandler onMapClick={() => setSelectedMapBoatId(null)} />
                     <MapAutoZoom boats={boats} selectedMapBoatId={selectedMapBoatId} focusBoatId={trackingBoatId} />
                     <BoatLayer boats={boats} trackingBoatId={trackingBoatId} setSelectedMapBoatId={setSelectedMapBoatId} setClusterModalBoats={setClusterModalBoats} currentTime={currentTime} />
                   </MapContainer>
-
+                </div>
                   {/* Indicador de Sincronização Inteligente com Countdown */}
                   <div style={{ position: 'absolute', bottom: '20px', left: '50%', transform: 'translateX(-50%)', zIndex: 1000, background: 'rgba(255,255,255,0.95)', padding: '12px 24px', borderRadius: '30px', boxShadow: '0 4px 15px rgba(0,0,0,0.15)', display: 'flex', alignItems: 'center', gap: '10px', border: '1px solid #e2e8f0', whiteSpace: 'nowrap' }}>
                     <div style={{ 
