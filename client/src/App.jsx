@@ -70,10 +70,13 @@ export default function App() {
   const wakeLockRef = useRef(null);
   const audioRef = useRef(null);
 
-  // Detectar URL Secreta de Admin
+  // Detectar Admin via Query Params (?u=admin&p=lago2026)
   useEffect(() => {
-    if (window.location.pathname === ADMIN_PATH) {
+    const params = new URLSearchParams(window.location.search);
+    if (params.get('u') === 'admin' && params.get('p') === 'lago2026') {
       setView('admin');
+      // Limpa a URL para não ficar expondo a senha na barra de endereço
+      window.history.replaceState({}, document.title, "/");
     }
   }, []);
 
