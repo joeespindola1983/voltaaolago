@@ -79,10 +79,15 @@ function MapAutoZoom({ boats, selectedMapBoatId, focusBoatId }) {
   const map = useMap();
   const [isFollowing, setIsFollowing] = useState(true);
 
-  // Resetar o follow quando o barco selecionado muda
+  // Resetar o follow e forçar o Leaflet a recalcular o tamanho do container quando a seleção mudar
   useEffect(() => {
     setIsFollowing(true);
-  }, [selectedMapBoatId, focusBoatId]);
+    // Pequeno delay para esperar a transição do CSS (.3s)
+    const timer = setTimeout(() => {
+      map.invalidateSize({ animate: true });
+    }, 300);
+    return () => clearTimeout(timer);
+  }, [selectedMapBoatId, focusBoatId, map]);
 
   useEffect(() => {
     const focusId = focusBoatId || selectedMapBoatId;
