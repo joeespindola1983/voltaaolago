@@ -1133,38 +1133,55 @@ export default function App() {
               </select>
             </div>
 
-            <h3 style={{ fontSize: '16px', marginBottom: '10px' }}>Barcos no Sistema ({boats.length})</h3>
-            {boats.map(b => (
-              <div key={b.id} style={{ background: 'white', marginBottom: '10px', padding: '15px', borderRadius: '12px', boxShadow: '0 2px 5px rgba(0,0,0,0.02)', display: 'flex', justifyContent: 'space-between', alignItems: 'center', border: '1px solid #f1f5f9' }}>
-                <div>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                    <div style={{ width: '10px', height: '10px', borderRadius: '50%', background: b.color }} />
-                    <strong>{b.name}</strong>
+            <h3 style={{ fontSize: '16px', marginBottom: '10px' }}>Monitoramento de Telemetria ({boats.length})</h3>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+              {boats.map(b => {
+                const diff = (currentTime - new Date(b.last_updated).getTime()) / 60000;
+                const status = diff < 5 ? 'online' : (diff < 15 ? 'warning' : 'lost');
+                const statusLabel = status === 'online' ? 'Ativo' : (status === 'warning' ? 'Sinal Instável' : 'SINAL PERDIDO');
+                const statusColor = status === 'online' ? '#10b981' : (status === 'warning' ? '#f59e0b' : '#ef4444');
+
+                return (
+                  <div key={b.id} style={{ background: 'white', padding: '15px', borderRadius: '15px', border: `2px solid ${statusColor}`, boxShadow: '0 2px 8px rgba(0,0,0,0.05)' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '10px' }}>
+                      <div>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                          <div style={{ width: '12px', height: '12px', borderRadius: '50%', background: b.color }} />
+                          <strong style={{ fontSize: '16px' }}>{b.name}</strong>
+                        </div>
+                        <div style={{ fontSize: '12px', color: '#64748b' }}>@{b.nickname} • {b.category}</div>
+                      </div>
+                      <div style={{ textAlign: 'right' }}>
+                        <div style={{ fontSize: '10px', fontWeight: 'bold', color: statusColor, textTransform: 'uppercase' }}>{statusLabel}</div>
+                        <div style={{ fontSize: '11px', color: '#94a3b8' }}>há {Math.floor(diff)} min</div>
+                      </div>
+                    </div>
+
+                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '8px', borderTop: '1px solid #f1f5f9', paddingTop: '10px' }}>
+                      <div style={{ textAlign: 'center' }}>
+                        <div style={{ fontSize: '9px', color: '#94a3b8', textTransform: 'uppercase' }}>Bateria</div>
+                        <div style={{ fontSize: '13px', fontWeight: 'bold', color: (b.battery_level || 0) < 20 ? '#ef4444' : '#1e293b' }}>
+                          <Battery size={12} style={{ verticalAlign: 'middle', marginRight: '2px' }} /> {b.battery_level || '--'}%
+                        </div>
+                      </div>
+                      <div style={{ textAlign: 'center' }}>
+                        <div style={{ fontSize: '9px', color: '#94a3b8', textTransform: 'uppercase' }}>Precisão</div>
+                        <div style={{ fontSize: '13px', fontWeight: 'bold', color: (b.heading === null) ? '#ef4444' : '#1e293b' }}>
+                          {b.distance?.toFixed(1)}km
+                        </div>
+                      </div>
+                      <div style={{ textAlign: 'center' }}>
+                        <div style={{ fontSize: '9px', color: '#94a3b8', textTransform: 'uppercase' }}>Ações</div>
+                        <div style={{ display: 'flex', justifyContent: 'center', gap: '10px' }}>
+                          <RefreshCw size={16} color="#f59e0b" onClick={() => { if (window.confirm('Resetar barco?')) axios.post(`${API_URL}/api/boats/${b.id}/reset`).then(() => fetchBoats()); }} style={{ cursor: 'pointer' }} />
+                          <Trash2 size={16} color="#ef4444" onClick={() => { if (window.confirm('Remover barco?')) axios.delete(`${API_URL}/api/boats/${b.id}`).then(() => fetchBoats()); }} style={{ cursor: 'pointer' }} />
+                        </div>
+                      </div>
+                    </div>
                   </div>
-                  <div style={{ fontSize: '12px', color: '#64748b' }}>@{b.nickname} • {b.distance?.toFixed(2)} km • {b.type}</div>
-                </div>
-                <div style={{ display: 'flex', gap: '8px' }}>
-                  <button onClick={async () => {
-                    if (window.confirm(`Resetar distância e rastro de "${b.name}"?`)) {
-                      await axios.post(`${API_URL}/api/boats/${b.id}/reset`);
-                      fetchBoats();
-                    }
-                  }} style={{ color: '#f59e0b', border: 'none', background: '#fffbeb', padding: '10px', borderRadius: '10px', cursor: 'pointer' }}>
-                    <RefreshCw size={20} />
-                  </button>
-                  <button onClick={async () => { 
-                    if (window.confirm(`TEM CERTEZA? Isso removerá o barco "${b.name}" (@${b.nickname}) COMPLETAMENTE do sistema, incluindo histórico e atletas.`)) {
-                      try {
-                        await axios.delete(`${API_URL}/api/boats/${b.id}`);
-                        fetchBoats();
-                      } catch (err) { alert('Erro ao remover barco'); }
-                    }
-                  }} style={{ color: '#ef4444', border: 'none', background: '#fef2f2', padding: '10px', borderRadius: '10px', cursor: 'pointer' }}>
-                    <Trash2 size={20} />
-                  </button>
-                </div>
-              </div>
-            ))}
+                );
+              })}
+            </div>
           </div>
         )}
       </div>
