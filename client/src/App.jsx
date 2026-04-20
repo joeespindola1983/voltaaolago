@@ -3,7 +3,7 @@ import { io } from 'socket.io-client';
 import { MapContainer, TileLayer, Marker, Popup, useMap, useMapEvents, Polyline } from 'react-leaflet';
 import L from 'leaflet';
 import axios from 'axios';
-import { Map as MapIcon, Play, RefreshCw, Ship, Anchor, Users, Navigation, Activity, LogOut, AlertTriangle, Trash2, UserMinus, X, Battery } from 'lucide-react';
+import { Map as MapIcon, Play, RefreshCw, Ship, Anchor, Users, Navigation, Activity, LogOut, AlertTriangle, Trash2, UserMinus, X, Battery, Trophy } from 'lucide-react';
 
 // --- CONFIGURAÇÕES ---
 const BACKEND_URL = 'https://voltaaolago-backend.onrender.com';
@@ -417,6 +417,7 @@ export default function App() {
     <div style={{ height: '100%', display: 'flex', flexDirection: 'column', background: '#f8fafc' }}>
       <nav style={{ background: '#1e3a8a', color: 'white', padding: '12px 10px', display: 'flex', justifyContent: 'space-around', zIndex: 1000, boxShadow: '0 2px 10px rgba(0,0,0,0.2)' }}>
         <button onClick={() => { setView('map'); setSelectedMapBoatId(null); setClusterModalBoats(null); }} style={navBtnStyle}><MapIcon size={22} /> Mapa</button>
+        <button onClick={() => { setView('ranking'); setSelectedMapBoatId(null); setClusterModalBoats(null); }} style={navBtnStyle}><Trophy size={22} /> Ranking</button>
         <button onClick={() => { setView('boats'); setSelectedMapBoatId(null); setClusterModalBoats(null); }} style={navBtnStyle}><Ship size={22} /> Barcos</button>
         <button onClick={() => { setView('track'); setSelectedMapBoatId(null); setClusterModalBoats(null); }} style={navBtnStyle}><Play size={22} /> Transmitir</button>
       </nav>
@@ -437,6 +438,36 @@ export default function App() {
                   </button>
                 ))}
               </div>
+            </div>
+          </div>
+        )}
+
+        {view === 'ranking' && (
+          <div style={{ padding: '20px', overflowY: 'auto', height: '100%' }}>
+            <h2 style={{ margin: '0 0 20px 0', display: 'flex', alignItems: 'center', gap: '10px' }}><Trophy color="#f59e0b" /> Classificação Geral</h2>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+              {[...boats].sort((a, b) => (b.distance || 0) - (a.distance || 0)).map((b, i) => {
+                const diff = (currentTime - new Date(b.last_updated).getTime()) / 60000;
+                const isOnline = b.lat && b.lng && diff < 5;
+                return (
+                  <div key={b.id} onClick={() => { setSelectedMapBoatId(b.id); setView('map'); }} style={{ background: 'white', padding: '15px', borderRadius: '15px', boxShadow: '0 2px 8px rgba(0,0,0,0.05)', display: 'flex', alignItems: 'center', gap: '15px', cursor: 'pointer', border: '1px solid #f1f5f9' }}>
+                    <div style={{ fontSize: '20px', fontWeight: '900', color: i < 3 ? '#f59e0b' : '#94a3b8', width: '30px' }}>{i + 1}º</div>
+                    <div style={{ flex: 1 }}>
+                      <div style={{ fontWeight: 'bold', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                        <div style={{ width: '10px', height: '10px', borderRadius: '50%', background: b.color }} />
+                        {b.name}
+                        {isOnline && <div style={{ width: '6px', height: '6px', borderRadius: '50%', background: '#10b981', animation: 'pulse 1s infinite' }} />}
+                      </div>
+                      <div style={{ fontSize: '11px', color: '#64748b' }}>@{b.nickname} • {b.type}</div>
+                    </div>
+                    <div style={{ textAlign: 'right' }}>
+                      <div style={{ fontWeight: 'bold', fontSize: '16px', color: '#1e3a8a' }}>{b.distance?.toFixed(2) || '0.00'} <span style={{ fontSize: '10px' }}>km</span></div>
+                      <div style={{ fontSize: '11px', color: '#64748b' }}>{calculatePace(b.speed)} min/km</div>
+                    </div>
+                  </div>
+                );
+              })}
+              {boats.length === 0 && <div style={{ textAlign: 'center', padding: '40px', color: '#64748b' }}>Nenhum barco na disputa ainda.</div>}
             </div>
           </div>
         )}
@@ -767,16 +798,26 @@ export default function App() {
                   </div>
                   <div style={{ fontSize: '12px', color: '#64748b' }}>@{b.nickname} • {b.distance?.toFixed(2)} km • {b.type}</div>
                 </div>
-                <button onClick={async () => { 
-                  if (window.confirm(`TEM CERTEZA? Isso removerá o barco "${b.name}" (@${b.nickname}) COMPLETAMENTE do sistema, incluindo histórico e atletas.`)) {
-                    try {
-                      await axios.delete(`${API_URL}/api/boats/${b.id}`);
+                <div style={{ display: 'flex', gap: '8px' }}>
+                  <button onClick={async () => {
+                    if (window.confirm(`Resetar distância e rastro de "${b.name}"?`)) {
+                      await axios.post(`${API_URL}/api/boats/${b.id}/reset`);
                       fetchBoats();
-                    } catch (err) { alert('Erro ao remover barco'); }
-                  }
-                }} style={{ color: '#ef4444', border: 'none', background: '#fef2f2', padding: '10px', borderRadius: '10px', cursor: 'pointer' }}>
-                  <Trash2 size={20} />
-                </button>
+                    }
+                  }} style={{ color: '#f59e0b', border: 'none', background: '#fffbeb', padding: '10px', borderRadius: '10px', cursor: 'pointer' }}>
+                    <RefreshCw size={20} />
+                  </button>
+                  <button onClick={async () => { 
+                    if (window.confirm(`TEM CERTEZA? Isso removerá o barco "${b.name}" (@${b.nickname}) COMPLETAMENTE do sistema, incluindo histórico e atletas.`)) {
+                      try {
+                        await axios.delete(`${API_URL}/api/boats/${b.id}`);
+                        fetchBoats();
+                      } catch (err) { alert('Erro ao remover barco'); }
+                    }
+                  }} style={{ color: '#ef4444', border: 'none', background: '#fef2f2', padding: '10px', borderRadius: '10px', cursor: 'pointer' }}>
+                    <Trash2 size={20} />
+                  </button>
+                </div>
               </div>
             ))}
           </div>

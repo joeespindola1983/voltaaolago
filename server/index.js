@@ -244,6 +244,20 @@ app.delete('/api/boats/:id', async (req, res) => {
   }
 });
 
+// Resetar distância e histórico de um barco
+app.post('/api/boats/:id/reset', async (req, res) => {
+  const { id } = req.params;
+  try {
+    await pool.query('UPDATE boats SET distance = 0, speed = 0, lat = NULL, lng = NULL WHERE id = $1', [id]);
+    await pool.query('DELETE FROM location_history WHERE boat_id = $1', [id]);
+    const updated = await pool.query('SELECT * FROM boats WHERE id = $1', [id]);
+    io.emit('boat_updated', updated.rows[0]);
+    res.json({ success: true });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // Remover uma equipe da fila
 app.delete('/api/boats/:id/queue/:index', async (req, res) => {
   const { id, index } = req.params;
