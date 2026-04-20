@@ -89,6 +89,17 @@ async function initDb() {
       );
     `);
     
+    // Tabela para armazenar postos de troca e pontos de interesse
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS waypoints (
+        id SERIAL PRIMARY KEY,
+        name VARCHAR(100),
+        lat DOUBLE PRECISION NOT NULL,
+        lng DOUBLE PRECISION NOT NULL,
+        type VARCHAR(50) DEFAULT 'exchange'
+      );
+    `);
+    
     client.release();
     console.log("Tabelas prontas e atualizadas.");
   } catch (err) {
@@ -398,7 +409,41 @@ app.get('*', (req, res) => {
   });
 });
 
-// Socket.io
+// --- ROTAS DE WAYPOINTS (PONTOS DE TROCA) ---
+app.get('/api/waypoints', async (req, res) => {
+  try {
+    const result = await pool.query('SELECT * FROM waypoints ORDER BY id ASC');
+    res.json(result.rows);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.post('/api/waypoints', async (req, res) => {
+  const { name, lat, lng, type } = req.body;
+  try {
+    const result = await pool.query(
+      'INSERT INTO waypoints (name, lat, lng, type) VALUES ($1, $2, $3, $4) RETURNING *',
+      [name, lat, lng, type || 'exchange']
+    );
+    io.emit('waypoints_updated', result.rows[0]);
+    res.status(201).json(result.rows[0]);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.delete('/api/waypoints/:id', async (req, res) => {
+  try {
+    await pool.query('DELETE FROM waypoints WHERE id = $1', [req.params.id]);
+    io.emit('waypoints_deleted', { id: req.params.id });
+    res.json({ success: true });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// --- SOCKET.IO ---
 io.on('connection', (socket) => {
   // Enviar configuração atual ao conectar
   socket.emit('config_updated', { relayTimeout: globalRelayTimeout, raceStartTime, lastBroadcast });

@@ -207,11 +207,52 @@ function BroadcastBar({ broadcast }) {
   );
 }
 
+function MapWaypoints({ waypoints, isAdmin, onAddWaypoint, onDeleteWaypoint }) {
+  const map = useMapEvents({
+    click: (e) => {
+      if (isAdmin && e.originalEvent.shiftKey) {
+        const name = prompt('Nome do Ponto de Troca (ex: P1, P2):');
+        if (name) onAddWaypoint({ name, lat: e.latlng.lat, lng: e.latlng.lng });
+      }
+    }
+  });
+
+  return (
+    <>
+      {waypoints.map(wp => (
+        <Marker 
+          key={wp.id} 
+          position={[wp.lat, wp.lng]} 
+          icon={L.divIcon({
+            html: `<div style="background: white; border: 2px solid #1e3a8a; border-radius: 50%; width: 24px; height: 24px; display: flex; align-items: center; justify-content: center; font-weight: bold; font-size: 10px; color: #1e3a8a; box-shadow: 0 2px 5px rgba(0,0,0,0.2);">${wp.name}</div>`,
+            className: '', iconSize: [24, 24], iconAnchor: [12, 12]
+          })}
+        >
+          {isAdmin && (
+            <Popup>
+              <div style={{ textAlign: 'center' }}>
+                <strong>{wp.name}</strong><br/>
+                <button 
+                  onClick={() => onDeleteWaypoint(wp.id)}
+                  style={{ background: '#ef4444', color: 'white', border: 'none', padding: '5px 10px', borderRadius: '5px', marginTop: '10px', fontSize: '10px' }}
+                >
+                  Excluir Ponto
+                </button>
+              </div>
+            </Popup>
+          )}
+        </Marker>
+      ))}
+    </>
+  );
+}
+
 export default function App() {
   const [view, setView] = useState(() => localStorage.getItem('vtl_view') || 'map');
   const [boats, setBoats] = useState([]);
   const [selectedMapBoatId, setSelectedMapBoatId] = useState(null);
   const [clusterModalBoats, setClusterModalBoats] = useState(null);
+  const [waypoints, setWaypoints] = useState([]);
 
   useEffect(() => { localStorage.setItem('vtl_view', view); }, [view]);
   const [boatName, setBoatName] = useState('');
@@ -332,6 +373,7 @@ export default function App() {
 
   useEffect(() => {
     fetchBoats();
+    fetchWaypoints();
     socket.on('config_updated', (data) => { 
       setRelayTimeout(data.relayTimeout); 
       relayTimeoutRef.current = data.relayTimeout; 
@@ -341,6 +383,8 @@ export default function App() {
     socket.on('broadcast_received', (data) => {
       setBroadcast(data);
     });
+    socket.on('waypoints_updated', () => fetchWaypoints());
+    socket.on('waypoints_deleted', () => fetchWaypoints());
     socket.on('sos_alert', (data) => {
       alert(`🚨 EMERGÊNCIA: O barco ${data.boatName} ativou o SOS!`);
     });
@@ -395,6 +439,10 @@ export default function App() {
 
   const fetchBoats = async () => {
     try { const res = await axios.get(`${API_URL}/api/boats`); setBoats(res.data); } catch (err) { console.error('Erro API:', err); }
+  };
+
+  const fetchWaypoints = async () => {
+    try { const res = await axios.get(`${API_URL}/api/waypoints`); setWaypoints(res.data); } catch (err) { console.error('Erro Waypoints:', err); }
   };
 
   const startNewTracking = async () => {
@@ -896,6 +944,12 @@ export default function App() {
                 </LayersControl>
                 <RaceClock startTime={raceStartTime} />
                 <MapEventHandler onMapClick={() => setSelectedMapBoatId(null)} />
+                <MapWaypoints 
+                  waypoints={waypoints} 
+                  isAdmin={isAdmin} 
+                  onAddWaypoint={(wp) => axios.post(`${API_URL}/api/waypoints`, wp)} 
+                  onDeleteWaypoint={(id) => axios.delete(`${API_URL}/api/waypoints/${id}`)} 
+                />
                 
                 {/* Botões de Controle do Mapa */}
                 <div style={{ position: 'absolute', top: '70px', right: '10px', zIndex: 1000, display: 'flex', flexDirection: 'column', gap: '10px' }}>
@@ -1066,6 +1120,12 @@ export default function App() {
                         </BaseLayer>
                       </LayersControl>
                       <MapEventHandler onMapClick={() => setSelectedMapBoatId(null)} />
+                      <MapWaypoints 
+                        waypoints={waypoints} 
+                        isAdmin={isAdmin} 
+                        onAddWaypoint={(wp) => axios.post(`${API_URL}/api/waypoints`, wp)} 
+                        onDeleteWaypoint={(id) => axios.delete(`${API_URL}/api/waypoints/${id}`)} 
+                      />
                       <MapAutoZoom boats={boats} selectedMapBoatId={selectedMapBoatId} focusBoatId={trackingBoatId} />
                       <BoatLayer boats={boats} trackingBoatId={trackingBoatId} setSelectedMapBoatId={setSelectedMapBoatId} setClusterModalBoats={setClusterModalBoats} currentTime={currentTime} />
                     </MapContainer>
