@@ -636,9 +636,9 @@ export default function App() {
           <div style={{ padding: '20px', overflowY: 'auto', height: '100%' }}>
             <h2 style={{ margin: '0 0 15px 0', display: 'flex', alignItems: 'center', gap: '10px' }}><Trophy color="#f59e0b" /> Classificação</h2>
             
-            {/* Filtros de Categoria */}
+            {/* Filtros de Categoria Dinâmicos */}
             <div style={{ display: 'flex', gap: '8px', overflowX: 'auto', paddingBottom: '15px', marginBottom: '15px', borderBottom: '1px solid #e2e8f0' }}>
-              {['Geral', 'OC6 Mista', 'OC6 Open', 'OC6 Master', 'OC6 Feminino', 'V1 / OC1', 'Surfski'].map(cat => (
+              {['Geral', ...Object.values(BOAT_CATEGORIES).flat()].map(cat => (
                 <button 
                   key={cat} 
                   onClick={() => setActiveRankingCategory(cat)}
@@ -654,30 +654,38 @@ export default function App() {
             </div>
 
             <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-              {[...boats]
-                .filter(b => activeRankingCategory === 'Geral' || b.category === activeRankingCategory)
-                .sort((a, b) => (b.distance || 0) - (a.distance || 0))
-                .map((b, i) => {
-                const diff = (currentTime - new Date(b.last_updated).getTime()) / 60000;
-                const isOnline = b.lat && b.lng && diff < 5;
-                return (
-                  <div key={b.id} onClick={() => { setSelectedMapBoatId(b.id); setView('map'); }} style={{ background: 'white', padding: '15px', borderRadius: '15px', boxShadow: '0 2px 8px rgba(0,0,0,0.05)', display: 'flex', alignItems: 'center', gap: '15px', cursor: 'pointer', border: '1px solid #f1f5f9' }}>
-                    <div style={{ fontSize: '20px', fontWeight: '900', color: i < 3 ? '#f59e0b' : '#94a3b8', width: '30px' }}>{i + 1}º</div>
-                    <div style={{ flex: 1 }}>
-                      <div style={{ fontWeight: 'bold', display: 'flex', alignItems: 'center', gap: '6px' }}>
-                        <div style={{ width: '10px', height: '10px', borderRadius: '50%', background: b.color }} />
-                        {b.name}
-                        {isOnline && <div style={{ width: '6px', height: '6px', borderRadius: '50%', background: '#10b981', animation: 'pulse 1s infinite' }} />}
+              {(() => {
+                const filteredBoats = boats
+                  .filter(b => activeRankingCategory === 'Geral' || b.category === activeRankingCategory)
+                  .sort((a, b) => (b.distance || 0) - (a.distance || 0));
+                
+                const leaderDistance = filteredBoats[0]?.distance || 0;
+
+                return filteredBoats.map((b, i) => {
+                  const diff = (currentTime - new Date(b.last_updated).getTime()) / 60000;
+                  const isOnline = b.lat && b.lng && diff < 5;
+                  const gap = leaderDistance - (b.distance || 0);
+
+                  return (
+                    <div key={b.id} onClick={() => { setSelectedMapBoatId(b.id); setView('map'); }} style={{ background: 'white', padding: '15px', borderRadius: '15px', boxShadow: '0 2px 8px rgba(0,0,0,0.05)', display: 'flex', alignItems: 'center', gap: '15px', cursor: 'pointer', border: '1px solid #f1f5f9' }}>
+                      <div style={{ fontSize: '20px', fontWeight: '900', color: i < 3 ? '#f59e0b' : '#94a3b8', width: '30px' }}>{i + 1}º</div>
+                      <div style={{ flex: 1 }}>
+                        <div style={{ fontWeight: 'bold', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                          <div style={{ width: '10px', height: '10px', borderRadius: '50%', background: b.color }} />
+                          {b.name}
+                          {isOnline && <div style={{ width: '6px', height: '6px', borderRadius: '50%', background: '#10b981', animation: 'pulse 1s infinite' }} />}
+                        </div>
+                        <div style={{ fontSize: '11px', color: '#64748b' }}>@{b.nickname} • {b.category}</div>
                       </div>
-                      <div style={{ fontSize: '11px', color: '#64748b' }}>@{b.nickname} • {b.category}</div>
+                      <div style={{ textAlign: 'right' }}>
+                        <div style={{ fontWeight: 'bold', fontSize: '16px', color: '#1e3a8a' }}>{b.distance?.toFixed(2) || '0.00'} <span style={{ fontSize: '10px' }}>km</span></div>
+                        {gap > 0 && <div style={{ fontSize: '10px', color: '#ef4444', fontWeight: 'bold' }}>-{gap.toFixed(2)} km</div>}
+                        <div style={{ fontSize: '11px', color: '#64748b' }}>{calculatePace(b.speed)} min/km</div>
+                      </div>
                     </div>
-                    <div style={{ textAlign: 'right' }}>
-                      <div style={{ fontWeight: 'bold', fontSize: '16px', color: '#1e3a8a' }}>{b.distance?.toFixed(2) || '0.00'} <span style={{ fontSize: '10px' }}>km</span></div>
-                      <div style={{ fontSize: '11px', color: '#64748b' }}>{calculatePace(b.speed)} min/km</div>
-                    </div>
-                  </div>
-                );
-              })}
+                  );
+                });
+              })()}
               {boats.filter(b => activeRankingCategory === 'Geral' || b.category === activeRankingCategory).length === 0 && (
                 <div style={{ textAlign: 'center', padding: '40px', color: '#64748b' }}>Nenhum barco nesta categoria.</div>
               )}
@@ -750,15 +758,16 @@ export default function App() {
                 
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr', gap: '10px' }}>
                   <div>
-                    <label style={labelStyle}>CATEGORIA (ex: Mista, Open, Master)</label>
+                    <label style={labelStyle}>CATEGORIA DE DISPUTA</label>
                     <select style={inputStyle} onChange={(e) => setBoatCategory(e.target.value)} value={boatCategory}>
-                      <option value="Geral">Geral</option>
-                      <option value="OC6 Mista">OC6 Mista</option>
-                      <option value="OC6 Open">OC6 Open</option>
-                      <option value="OC6 Master">OC6 Master</option>
-                      <option value="OC6 Feminino">OC6 Feminino</option>
-                      <option value="V1 / OC1">V1 / OC1</option>
-                      <option value="Surfski">Surfski</option>
+                      <option value="Geral">Geral (Todas)</option>
+                      {Object.keys(BOAT_CATEGORIES).map(cat => (
+                        <optgroup key={cat} label={cat}>
+                          {BOAT_CATEGORIES[cat].map(t => (
+                            <option key={t} value={t}>{t}</option>
+                          ))}
+                        </optgroup>
+                      ))}
                     </select>
                   </div>
                   <div>
