@@ -4,8 +4,12 @@ import { MapContainer, TileLayer, Marker, Popup, useMap, useMapEvents, Polyline 
 import L from 'leaflet';
 import axios from 'axios';
 import { Map as MapIcon, Play, RefreshCw, Ship, Anchor, Users, Navigation, Activity, LogOut, AlertTriangle, Trash2, UserMinus, X, Battery, Trophy } from 'lucide-react';
+import { Capacitor } from '@capacitor/core';
+import { Geolocation } from '@capacitor/geolocation';
+import { Device } from '@capacitor/device';
 
 // --- CONFIGURAÇÕES ---
+const isApp = Capacitor.isNativePlatform();
 const BACKEND_URL = 'https://voltaaolago-backend.onrender.com';
 const API_URL = window.location.hostname === 'localhost' ? 'http://localhost:3001' : BACKEND_URL;
 const socket = io(API_URL);
@@ -382,69 +386,118 @@ export default function App() {
   };
 
   const stopTracking = (forceMap = false) => {
-    setIsTracking(false); 
+    setIsTracking(false);
     isTrackingRef.current = false;
     setTrackingBoatId(null);
     trackingBoatIdRef.current = null;
     localStorage.removeItem('vtl_tracking_id');
     setSyncStatus('idle');
-    if (watchIdRef.current) navigator.geolocation.clearWatch(watchIdRef.current);
+
+    if (watchIdRef.current) {
+      if (isApp) {
+        Geolocation.clearWatch({ id: watchIdRef.current });
+      } else {
+        navigator.geolocation.clearWatch(watchIdRef.current);
+      }
+    }
+
     if (wakeLockRef.current) wakeLockRef.current.release();
     if (audioRef.current) audioRef.current.pause();
     if (forceMap) setView('map'); else window.location.reload();
   };
-
   const trackLocation = (id) => {
     if (!isTrackingRef.current) return;
-    if (!navigator.geolocation) return;
 
-    if (watchIdRef.current) navigator.geolocation.clearWatch(watchIdRef.current);
+    if (isApp) {
+      const startNativeTracking = async () => {
+        const watchId = await Geolocation.watchPosition(
+          { enableHighAccuracy: true, timeout: 20000 },
+          async (pos, err) => {
+            if (err || !pos || !isTrackingRef.current) return;
+            
+            const now = Date.now();
+            if (!lastSentRef.current || (now - lastSentRef.current) >= (relayTimeoutRef.current * 60000)) {
+              setSyncStatus('sending');
+              
+              let batteryLevel = 100;
+              try {
+                const batteryInfo = await Device.getBatteryInfo();
+                batteryLevel = Math.round(batteryInfo.batteryLevel * 100);
+              } catch (e) {}
 
-    const watchId = navigator.geolocation.watchPosition(
-      async (pos) => {
-        if (!isTrackingRef.current) return;
-        
-        const now = Date.now();
-        if (!lastSentRef.current || (now - lastSentRef.current) >= (relayTimeoutRef.current * 60000)) {
-          setSyncStatus('sending');
-          
-          let batteryLevel = 100;
-          try {
-            if ('getBattery' in navigator) {
-              const battery = await navigator.getBattery();
-              batteryLevel = Math.round(battery.level * 100);
+              const payload = { 
+                boatId: id, 
+                lat: pos.coords.latitude, 
+                lng: pos.coords.longitude,
+                speed: pos.coords.speed,
+                heading: pos.coords.heading,
+                batteryLevel
+              };
+
+              if (socket.connected) {
+                socket.emit('update_location', payload);
+              } else {
+                const buffer = JSON.parse(localStorage.getItem('vtl_gps_buffer') || '[]');
+                buffer.push(payload);
+                localStorage.setItem('vtl_gps_buffer', JSON.stringify(buffer.slice(-50)));
+              }
+              setGpsAccuracy(pos.coords.accuracy);
+              lastSentRef.current = now;
             }
-          } catch (e) {}
-
-          const payload = { 
-            boatId: id, 
-            lat: pos.coords.latitude, 
-            lng: pos.coords.longitude,
-            speed: pos.coords.speed,
-            heading: pos.coords.heading,
-            batteryLevel
-          };
-
-          if (socket.connected) {
-            socket.emit('update_location', payload);
-          } else {
-            const buffer = JSON.parse(localStorage.getItem('vtl_gps_buffer') || '[]');
-            buffer.push(payload);
-            localStorage.setItem('vtl_gps_buffer', JSON.stringify(buffer.slice(-50))); // Guardar últimos 50 pontos
           }
+        );
+        watchIdRef.current = watchId;
+      };
+      startNativeTracking();
+    } else {
+      if (!navigator.geolocation) return;
+      if (watchIdRef.current) navigator.geolocation.clearWatch(watchIdRef.current);
 
-          setGpsAccuracy(pos.coords.accuracy);
-          lastSentRef.current = now;
-        }
-      },
-      (err) => { 
-        console.error("GPS Error:", err);
-        setSyncStatus('error');
-      },
-      { enableHighAccuracy: true, timeout: 20000, maximumAge: 0 }
-    );
-    
-    watchIdRef.current = watchId;
+      const watchId = navigator.geolocation.watchPosition(
+        async (pos) => {
+          if (!isTrackingRef.current) return;
+          
+          const now = Date.now();
+          if (!lastSentRef.current || (now - lastSentRef.current) >= (relayTimeoutRef.current * 60000)) {
+            setSyncStatus('sending');
+            
+            let batteryLevel = 100;
+            try {
+              if ('getBattery' in navigator) {
+                const battery = await navigator.getBattery();
+                batteryLevel = Math.round(battery.level * 100);
+              }
+            } catch (e) {}
+
+            const payload = { 
+              boatId: id, 
+              lat: pos.coords.latitude, 
+              lng: pos.coords.longitude,
+              speed: pos.coords.speed,
+              heading: pos.coords.heading,
+              batteryLevel
+            };
+
+            if (socket.connected) {
+              socket.emit('update_location', payload);
+            } else {
+              const buffer = JSON.parse(localStorage.getItem('vtl_gps_buffer') || '[]');
+              buffer.push(payload);
+              localStorage.setItem('vtl_gps_buffer', JSON.stringify(buffer.slice(-50)));
+            }
+
+            setGpsAccuracy(pos.coords.accuracy);
+            lastSentRef.current = now;
+          }
+        },
+        (err) => { 
+          console.error("GPS Error:", err);
+          setSyncStatus('error');
+        },
+        { enableHighAccuracy: true, timeout: 20000, maximumAge: 0 }
+      );
+      watchIdRef.current = watchId;
+    }
   };
 
   const calculatePace = (speedKmh) => {

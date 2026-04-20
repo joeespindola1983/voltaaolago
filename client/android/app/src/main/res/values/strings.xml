@@ -1,0 +1,7 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">VoltaAoLago</string>
+    <string name="title_activity_main">VoltaAoLago</string>
+    <string name="package_name">com.voltaaolago.app</string>
+    <string name="custom_url_scheme">com.voltaaolago.app</string>
+</resources>
