@@ -55,6 +55,7 @@ async function initDb() {
     await client.query(`ALTER TABLE boats ADD COLUMN IF NOT EXISTS crew_queue JSONB DEFAULT '[]'::jsonb;`);
     await client.query(`ALTER TABLE boats ADD COLUMN IF NOT EXISTS nickname VARCHAR(50) UNIQUE;`);
     await client.query(`ALTER TABLE boats ADD COLUMN IF NOT EXISTS pin VARCHAR(4);`);
+    await client.query(`ALTER TABLE boats ADD COLUMN IF NOT EXISTS color VARCHAR(20) DEFAULT '#2563eb';`);
     await client.query(`ALTER TABLE boats ADD COLUMN IF NOT EXISTS athletes JSONB DEFAULT '[]'::jsonb;`);
     await client.query(`ALTER TABLE boats ADD COLUMN IF NOT EXISTS exchanges JSONB DEFAULT '[]'::jsonb;`);
     
@@ -125,11 +126,11 @@ app.post('/api/boats/auth', async (req, res) => {
 });
 
 app.post('/api/boats', async (req, res) => {
-  const { name, type, nickname, pin, athletes, exchanges } = req.body;
+  const { name, type, nickname, pin, color, athletes, exchanges } = req.body;
   try {
     const result = await pool.query(
-      'INSERT INTO boats (name, type, nickname, pin, athletes, exchanges) VALUES ($1, $2, $3, $4, $5, $6) RETURNING *',
-      [name, type, nickname, pin, JSON.stringify(athletes || []), JSON.stringify(exchanges || [])]
+      'INSERT INTO boats (name, type, nickname, pin, color, athletes, exchanges) VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING *',
+      [name, type, nickname, pin, color || '#2563eb', JSON.stringify(athletes || []), JSON.stringify(exchanges || [])]
     );
     io.emit('boat_updated', result.rows[0]);
     res.status(201).json(result.rows[0]);

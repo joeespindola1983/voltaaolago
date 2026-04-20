@@ -16,16 +16,22 @@ const BOAT_CATEGORIES = {
   'Outros': ['Surfski', 'Caiaque', 'Stand Up']
 };
 
-const boatIcon = (type, status = 'online', isMe = false) => {
-  const colors = { online: '#2563eb', warning: '#f59e0b', lost: '#64748b' };
-  const color = isMe ? '#10b981' : (colors[status] || colors.online);
+const boatIcon = (name, status = 'online', isMe = false, customColor) => {
+  const statusColors = { online: '#2563eb', warning: '#f59e0b', lost: '#64748b' };
+  const baseColor = customColor || (isMe ? '#10b981' : statusColors[status] || statusColors.online);
+  
   return L.divIcon({
-    html: `<div style="background-color: ${color}; border-radius: 50%; width: 40px; height: 40px; display: flex; align-items: center; justify-content: center; border: 3px solid white; box-shadow: 0 4px 10px rgba(0,0,0,0.4);">
-            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
-              <path d="M2 12s3-2 10-2 10 2 10 2l-2 8H4l-2-8Z"/><path d="M12 10V2l4 4-4 4Z"/>
-            </svg>
+    html: `<div style="display: flex; flex-direction: column; align-items: center; width: 100px;">
+            <div style="background-color: ${baseColor}; border-radius: 50%; width: 40px; height: 40px; display: flex; align-items: center; justify-content: center; border: 3px solid white; box-shadow: 0 4px 10px rgba(0,0,0,0.4); ${isMe ? 'outline: 3px solid #10b981; outline-offset: 2px;' : ''}">
+              <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M2 12s3-2 10-2 10 2 10 2l-2 8H4l-2-8Z"/><path d="M12 10V2l4 4-4 4Z"/>
+              </svg>
+            </div>
+            <div style="background: rgba(255,255,255,0.9); padding: 2px 6px; border-radius: 4px; font-size: 10px; font-weight: bold; margin-top: 4px; border: 1px solid #cbd5e1; white-space: nowrap; color: #1e293b; box-shadow: 0 2px 4px rgba(0,0,0,0.1);">
+              ${name}
+            </div>
            </div>`,
-    className: '', iconSize: [40, 40], iconAnchor: [20, 20], popupAnchor: [0, -20]
+    className: '', iconSize: [100, 60], iconAnchor: [50, 20], popupAnchor: [0, -20]
   });
 };
 
@@ -64,7 +70,7 @@ function BoatLayer({ boats, trackingBoatId, setSelectedMapBoatId, setClusterModa
           const diff = (currentTime - new Date(boat.last_updated).getTime()) / 60000;
           const status = diff < 5 ? 'online' : (diff < 10 ? 'warning' : 'lost');
           return (
-            <Marker key={boat.id} position={[boat.lat, boat.lng]} icon={boatIcon(boat.type, status, boat.id === trackingBoatId)} eventHandlers={{ click: () => setSelectedMapBoatId(boat.id) }} />
+            <Marker key={boat.id} position={[boat.lat, boat.lng]} icon={boatIcon(boat.name, status, boat.id === trackingBoatId, boat.color)} eventHandlers={{ click: () => setSelectedMapBoatId(boat.id) }} />
           );
         }
         return (
@@ -142,6 +148,7 @@ export default function App() {
   const [boatName, setBoatName] = useState('');
   const [category, setCategory] = useState('');
   const [boatType, setBoatType] = useState('');
+  const [boatColor, setBoatColor] = useState('#2563eb');
   const [nickname, setNickname] = useState('');
   const [pin, setPin] = useState('');
   const [athletes, setAthletes] = useState([]);
@@ -358,15 +365,18 @@ export default function App() {
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
                   {boats.map(b => (
                     <div key={b.id} style={{ background: 'white', padding: '15px', borderRadius: '15px', boxShadow: '0 2px 8px rgba(0,0,0,0.05)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                      <div>
-                        <div style={{ fontWeight: 'bold', color: '#1e3a8a' }}>{b.name}</div>
-                        <div style={{ fontSize: '12px', color: '#64748b' }}>@{b.nickname} • {b.type}</div>
-                        <div style={{ fontSize: '11px', color: '#94a3b8', marginTop: '4px' }}>{b.athletes?.length || 0} atletas • {b.exchanges?.length || 0} trechos</div>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                        <div style={{ width: '12px', height: '12px', borderRadius: '50%', background: b.color || '#2563eb' }} />
+                        <div>
+                          <div style={{ fontWeight: 'bold', color: '#1e3a8a' }}>{b.name}</div>
+                          <div style={{ fontSize: '12px', color: '#64748b' }}>@{b.nickname} • {b.type}</div>
+                          <div style={{ fontSize: '11px', color: '#94a3b8', marginTop: '4px' }}>{b.athletes?.length || 0} atletas • {b.exchanges?.length || 0} trechos</div>
+                        </div>
                       </div>
                       <button onClick={() => {
                         const p = prompt('PIN de 2 dígitos:');
                         if (p === b.pin) {
-                          setBoatName(b.name); setNickname(b.nickname); setPin(b.pin); setAthletes(b.athletes || []); setExchanges(b.exchanges || []); setBoatType(b.type); setIsRegistering(true);
+                          setBoatName(b.name); setNickname(b.nickname); setPin(b.pin); setAthletes(b.athletes || []); setExchanges(b.exchanges || []); setBoatType(b.type); setBoatColor(b.color || '#2563eb'); setIsRegistering(true);
                         } else if (p !== null) alert('PIN incorreto!');
                       }} style={{ background: '#f1f5f9', border: 'none', padding: '10px 15px', borderRadius: '10px', fontSize: '12px', fontWeight: 'bold' }}>Gerenciar</button>
                     </div>
@@ -398,6 +408,14 @@ export default function App() {
                       {Object.values(BOAT_CATEGORIES).flat().map(t => <option key={t} value={t}>{t}</option>)}
                     </select>
                   </div>
+                </div>
+
+                <label style={labelStyle}>Cor no Mapa</label>
+                <div style={{ display: 'flex', gap: '10px', marginBottom: '15px', flexWrap: 'wrap' }}>
+                  {['#2563eb', '#ef4444', '#10b981', '#f59e0b', '#8b5cf6', '#ec4899', '#06b6d4', '#1e293b'].map(c => (
+                    <button key={c} onClick={() => setBoatColor(c)} style={{ width: '34px', height: '34px', borderRadius: '50%', background: c, border: boatColor === c ? '3px solid #1e3a8a' : '2px solid white', boxShadow: '0 2px 4px rgba(0,0,0,0.1)', cursor: 'pointer' }} />
+                  ))}
+                  <input type="color" value={boatColor} onChange={e => setBoatColor(e.target.value)} style={{ width: '34px', height: '34px', border: 'none', background: 'none', cursor: 'pointer' }} />
                 </div>
 
                 <div style={{ marginTop: '20px', borderTop: '1px solid #f1f5f9', paddingTop: '20px' }}>
@@ -443,7 +461,7 @@ export default function App() {
                 <button onClick={async () => {
                   if (!nickname || !boatName || pin.length < 2) return alert('Nickname, Nome e PIN (2 dígitos) são obrigatórios!');
                   try {
-                    await axios.post(`${API_URL}/api/boats`, { name: boatName, type: boatType, nickname, pin, athletes, exchanges });
+                    await axios.post(`${API_URL}/api/boats`, { name: boatName, type: boatType, nickname, pin, color: boatColor, athletes, exchanges });
                     alert('Barco salvo com sucesso!'); setIsRegistering(false); fetchBoats();
                   } catch (err) { alert(err.response?.data?.error || 'Erro ao salvar'); }
                 }} style={{ ...startBtnStyle, marginTop: '20px' }}>Salvar Barco</button>
@@ -566,16 +584,37 @@ export default function App() {
         {view === 'admin' && (
           <div style={{ padding: '20px', overflowY: 'auto' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
-              <h2 style={{ margin: 0 }}>Admin</h2>
+              <h2 style={{ margin: 0 }}>Painel de Controle Admin</h2>
               <button onClick={() => setView('map')} style={{ background: '#475569', color: 'white', border: 'none', padding: '8px 15px', borderRadius: '8px' }}>Sair</button>
             </div>
-            <select value={relayTimeout} onChange={(e) => axios.post(`${API_URL}/api/config`, { relayTimeout: e.target.value })} style={{ padding: '10px', width: '100%', borderRadius: '10px', marginBottom: '20px' }}>
-              {[1,2,3,4,5,10].map(n => <option key={n} value={n}>Relay GPS: {n} min</option>)}
-            </select>
+            
+            <div style={{ background: 'white', padding: '15px', borderRadius: '12px', marginBottom: '20px', border: '1px solid #e2e8f0' }}>
+              <label style={labelStyle}>Intervalo de GPS (Global)</label>
+              <select value={relayTimeout} onChange={(e) => axios.post(`${API_URL}/api/config`, { relayTimeout: e.target.value })} style={{ ...inputStyle, marginBottom: 0 }}>
+                {[1,2,3,4,5,10].map(n => <option key={n} value={n}>Relay GPS: {n} min</option>)}
+              </select>
+            </div>
+
+            <h3 style={{ fontSize: '16px', marginBottom: '10px' }}>Barcos no Sistema ({boats.length})</h3>
             {boats.map(b => (
-              <div key={b.id} style={{ background: 'white', marginBottom: '10px', padding: '15px', borderRadius: '12px', boxShadow: '0 2px 5px rgba(0,0,0,0.02)', display: 'flex', justifyContent: 'space-between' }}>
-                <div><strong>{b.name}</strong><br/><span style={{ fontSize: '12px', color: '#64748b' }}>{b.distance?.toFixed(2)} km</span></div>
-                <button onClick={() => { if (window.confirm('Excluir?')) axios.delete(`${API_URL}/api/boats/${b.id}`) }} style={{ color: '#ef4444', border: 'none', background: 'none' }}><Trash2 size={18} /></button>
+              <div key={b.id} style={{ background: 'white', marginBottom: '10px', padding: '15px', borderRadius: '12px', boxShadow: '0 2px 5px rgba(0,0,0,0.02)', display: 'flex', justifyContent: 'space-between', alignItems: 'center', border: '1px solid #f1f5f9' }}>
+                <div>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                    <div style={{ width: '10px', height: '10px', borderRadius: '50%', background: b.color }} />
+                    <strong>{b.name}</strong>
+                  </div>
+                  <div style={{ fontSize: '12px', color: '#64748b' }}>@{b.nickname} • {b.distance?.toFixed(2)} km • {b.type}</div>
+                </div>
+                <button onClick={async () => { 
+                  if (window.confirm(`TEM CERTEZA? Isso removerá o barco "${b.name}" (@${b.nickname}) COMPLETAMENTE do sistema, incluindo histórico e atletas.`)) {
+                    try {
+                      await axios.delete(`${API_URL}/api/boats/${b.id}`);
+                      fetchBoats();
+                    } catch (err) { alert('Erro ao remover barco'); }
+                  }
+                }} style={{ color: '#ef4444', border: 'none', background: '#fef2f2', padding: '10px', borderRadius: '10px', cursor: 'pointer' }}>
+                  <Trash2 size={20} />
+                </button>
               </div>
             ))}
           </div>
