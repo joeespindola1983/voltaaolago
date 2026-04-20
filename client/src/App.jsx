@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { io } from 'socket.io-client';
-import { MapContainer, TileLayer, Marker, Popup, useMap, useMapEvents, Polyline } from 'react-leaflet';
+import { MapContainer, TileLayer, Marker, Popup, useMap, useMapEvents, Polyline, LayersControl } from 'react-leaflet';
+const { BaseLayer } = LayersControl;
 import L from 'leaflet';
 import axios from 'axios';
 import { Map as MapIcon, Play, RefreshCw, Ship, Anchor, Users, Navigation, Activity, LogOut, AlertTriangle, Trash2, UserMinus, X, Battery, Trophy } from 'lucide-react';
@@ -839,9 +840,32 @@ export default function App() {
           <div style={{ display: 'flex', flex: 1, flexDirection: isLandscape ? 'row' : 'column', overflow: 'hidden' }}>
             <div style={{ flex: selectedMapBoatId ? (isLandscape ? '1 1 70%' : '0 0 55%') : '1 1 100%', transition: 'all 0.3s ease', position: 'relative' }}>
               <MapContainer center={[-15.7942, -47.8822]} zoom={13} style={{ height: '100%', width: '100%' }}>
-                <TileLayer url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png" />
+                <LayersControl position="topright">
+                  <BaseLayer checked name="Ruas">
+                    <TileLayer url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png" />
+                  </BaseLayer>
+                  <BaseLayer name="Satélite">
+                    <TileLayer 
+                      url="https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}"
+                      attribution='Tiles &copy; Esri &mdash; Source: Esri, i-cubed, USDA, USGS, AEX, GeoEye, Getmapping, Aerogrid, IGN, IGP, UPR-EBP, and the GIS User Community'
+                    />
+                  </BaseLayer>
+                </LayersControl>
                 <RaceClock startTime={raceStartTime} />
                 <MapEventHandler onMapClick={() => setSelectedMapBoatId(null)} />
+                
+                {/* Botões de Controle do Mapa */}
+                <div style={{ position: 'absolute', top: '70px', right: '10px', zIndex: 1000, display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                  <button onClick={() => { setSelectedMapBoatId(null); }} style={{ ...navBtnStyle, background: 'white', color: '#1e3a8a', width: '40px', height: '40px', borderRadius: '8px', boxShadow: '0 2px 5px rgba(0,0,0,0.2)', padding: 0, justifyContent: 'center' }}>
+                    <MapIcon size={20} />
+                  </button>
+                  {isTracking && (
+                    <button onClick={() => { setSelectedMapBoatId(trackingBoatId); }} style={{ ...navBtnStyle, background: 'white', color: '#10b981', width: '40px', height: '40px', borderRadius: '8px', boxShadow: '0 2px 5px rgba(0,0,0,0.2)', padding: 0, justifyContent: 'center' }}>
+                      <Anchor size={20} />
+                    </button>
+                  )}
+                </div>
+
                 <MapAutoZoom boats={boats} selectedMapBoatId={selectedMapBoatId} focusBoatId={isTracking ? trackingBoatId : null} />
                 <BoatLayer boats={boats} trackingBoatId={trackingBoatId} setSelectedMapBoatId={setSelectedMapBoatId} setClusterModalBoats={setClusterModalBoats} currentTime={currentTime} />
               </MapContainer>
@@ -987,7 +1011,17 @@ export default function App() {
                 <div style={{ display: 'flex', flex: 1, flexDirection: isLandscape ? 'row' : 'column', overflow: 'hidden' }}>
                   <div style={{ flex: selectedMapBoatId ? (isLandscape ? '1 1 70%' : '0 0 55%') : '1 1 100%', position: 'relative', transition: 'all 0.3s ease' }}>
                     <MapContainer center={[-15.7942, -47.8822]} zoom={13} style={{ height: '100%', width: '100%' }}>
-                      <TileLayer url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png" />
+                      <LayersControl position="topright">
+                        <BaseLayer checked name="Ruas">
+                          <TileLayer url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png" />
+                        </BaseLayer>
+                        <BaseLayer name="Satélite">
+                          <TileLayer 
+                            url="https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}"
+                            attribution='Tiles &copy; Esri &mdash; Source: Esri, i-cubed, USDA, USGS, AEX, GeoEye, Getmapping, Aerogrid, IGN, IGP, UPR-EBP, and the GIS User Community'
+                          />
+                        </BaseLayer>
+                      </LayersControl>
                       <MapEventHandler onMapClick={() => setSelectedMapBoatId(null)} />
                       <MapAutoZoom boats={boats} selectedMapBoatId={selectedMapBoatId} focusBoatId={trackingBoatId} />
                       <BoatLayer boats={boats} trackingBoatId={trackingBoatId} setSelectedMapBoatId={setSelectedMapBoatId} setClusterModalBoats={setClusterModalBoats} currentTime={currentTime} />
