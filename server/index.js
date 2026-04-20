@@ -4,7 +4,6 @@ const { Server } = require('socket.io');
 const cors = require('cors');
 const { Pool } = require('pg');
 const path = require('path');
-require('dotenv').config();
 
 const app = express();
 app.use(cors());
@@ -18,29 +17,22 @@ const io = new Server(server, {
   }
 });
 
-// Configuração do Banco de Dados com fallback para debug
-const connectionString = process.env.DATABASE_URL;
+// --- BANCO DE DADOS (HARDCODED PARA VELOCIDADE) ---
+const connectionString = 'postgresql://voltaaolago_db_user:D9QmMI4tqhLgIKqz0k6HYul0Wcm6fWVT@dpg-d7j6l89j2pic73b9n7ug-a.virginia-postgres.render.com/voltaaolago_db';
 
 const pool = new Pool({
   connectionString: connectionString,
   ssl: {
-    rejectUnauthorized: false // Obrigatório para Render
+    rejectUnauthorized: false 
   }
 });
 
-// Testar conexão imediatamente
-pool.connect((err, client, release) => {
-  if (err) {
-    return console.error('ERRO CRÍTICO: Não foi possível conectar ao banco de dados!', err.stack);
-  }
-  console.log('Conexão com o Banco de Dados estabelecida com sucesso.');
-  release();
-});
-
-// Inicialização das tabelas
+// Inicialização de tabelas
 async function initDb() {
   try {
-    await pool.query(`
+    const client = await pool.connect();
+    console.log("Conectado ao Postgres com sucesso!");
+    await client.query(`
       CREATE TABLE IF NOT EXISTS boats (
         id SERIAL PRIMARY KEY,
         name VARCHAR(255) NOT NULL,
@@ -52,22 +44,33 @@ async function initDb() {
         battery INTEGER
       );
     `);
-    console.log("Tabela 'boats' verificada/criada.");
+    client.release();
+    console.log("Tabelas prontas.");
   } catch (err) {
-    console.error("Erro ao criar tabelas:", err);
+    console.error("ERRO AO INICIAR BANCO:", err.message);
   }
 }
 initDb();
 
-// --- Rotas API ---
+// --- ROTAS ---
+
+// Rota de Teste (Acesse no navegador para ver se o banco responde)
+app.get('/api/health', async (req, res) => {
+  try {
+    const result = await pool.query('SELECT NOW()');
+    res.json({ status: 'ok', db_time: result.rows[0].now });
+  } catch (err) {
+    res.status(500).json({ status: 'error', error: err.message });
+  }
+});
 
 app.get('/api/boats', async (req, res) => {
   try {
     const result = await pool.query('SELECT * FROM boats WHERE active = true ORDER BY name ASC');
     res.json(result.rows);
   } catch (err) {
-    console.error('Erro na rota /api/boats:', err.message);
-    res.status(500).json({ error: 'Erro no Banco de Dados', details: err.message });
+    console.error('Erro na query /api/boats:', err.message);
+    res.status(500).json({ error: 'Erro no Banco', details: err.message });
   }
 });
 
@@ -80,15 +83,17 @@ app.post('/api/boats', async (req, res) => {
     );
     res.status(201).json(result.rows[0]);
   } catch (err) {
-    console.error('Erro ao criar barco:', err.message);
     res.status(500).json({ error: err.message });
   }
 });
 
-// Servir Frontend
+// Fallback para Frontend se estiver no mesmo servidor
 app.use(express.static(path.join(__dirname, '../client/dist')));
 app.get('*', (req, res) => {
-  res.sendFile(path.join(__dirname, '../client/dist/index.html'));
+  const indexPath = path.join(__dirname, '../client/dist/index.html');
+  res.sendFile(indexPath, (err) => {
+    if (err) res.status(200).send("API Online. Frontend não encontrado nesta rota.");
+  });
 });
 
 // Socket.io
