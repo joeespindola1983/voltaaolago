@@ -56,6 +56,7 @@ async function initDb() {
     await client.query(`ALTER TABLE boats ADD COLUMN IF NOT EXISTS nickname VARCHAR(50) UNIQUE;`);
     await client.query(`ALTER TABLE boats ADD COLUMN IF NOT EXISTS pin VARCHAR(4);`);
     await client.query(`ALTER TABLE boats ADD COLUMN IF NOT EXISTS color VARCHAR(20) DEFAULT '#2563eb';`);
+    await client.query(`ALTER TABLE boats ADD COLUMN IF NOT EXISTS speed DOUBLE PRECISION DEFAULT 0;`);
     await client.query(`ALTER TABLE boats ADD COLUMN IF NOT EXISTS athletes JSONB DEFAULT '[]'::jsonb;`);
     await client.query(`ALTER TABLE boats ADD COLUMN IF NOT EXISTS exchanges JSONB DEFAULT '[]'::jsonb;`);
     
@@ -256,7 +257,7 @@ io.on('connection', (socket) => {
   socket.emit('config_updated', { relayTimeout: globalRelayTimeout });
 
   socket.on('update_location', async (data) => {
-    const { boatId, lat, lng } = data;
+    const { boatId, lat, lng, speed } = data;
     if (!boatId || !lat || !lng) return;
     try {
       const resBoat = await pool.query('SELECT lat, lng, distance FROM boats WHERE id = $1', [boatId]);
@@ -269,18 +270,19 @@ io.on('connection', (socket) => {
       // Calcular distância se já tinha posição anterior
       if (oldLat && oldLng) {
         const distKm = getDistance(oldLat, oldLng, lat, lng);
-        // Filtrar ruído de GPS (só soma se moveu mais de 5 metros e menos de 2km por minuto para evitar saltos irreais)
         if (distKm > 0.005 && distKm < 2.0) {
           distance += distKm;
         }
       }
       
+      const currentSpeed = speed ? (speed * 3.6).toFixed(1) : 0; // Convert m/s to km/h
+      
       await pool.query(
-        'UPDATE boats SET lat = $1, lng = $2, distance = $3, last_updated = CURRENT_TIMESTAMP WHERE id = $4',
-        [lat, lng, distance, boatId]
+        'UPDATE boats SET lat = $1, lng = $2, distance = $3, speed = $4, last_updated = CURRENT_TIMESTAMP WHERE id = $5',
+        [lat, lng, distance, currentSpeed, boatId]
       );
       
-      io.emit('location_changed', { boatId, lat, lng, distance, lastUpdated: new Date() });
+      io.emit('location_changed', { boatId, lat, lng, distance, speed: currentSpeed, lastUpdated: new Date() });
     } catch (err) {
       console.error('Erro Socket:', err.message);
     }

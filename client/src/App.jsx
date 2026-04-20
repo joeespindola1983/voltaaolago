@@ -322,7 +322,8 @@ export default function App() {
           socket.emit('update_location', { 
             boatId: id, 
             lat: pos.coords.latitude, 
-            lng: pos.coords.longitude 
+            lng: pos.coords.longitude,
+            speed: pos.coords.speed // Metros por segundo
           });
           lastSentRef.current = now;
           // O setSyncStatus('ok') virá via socket no listener de location_changed
@@ -344,9 +345,10 @@ export default function App() {
         <h2 style={{ margin: 0, fontSize: '20px' }}>{boat.name}</h2>
         <button onClick={onClose} style={{ background: '#f1f5f9', border: 'none', padding: '5px 10px', borderRadius: '8px', fontSize: '12px' }}>Fechar</button>
       </div>
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px', marginBottom: '15px' }}>
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '8px', marginBottom: '15px' }}>
         <div style={infoCardStyle}><Navigation size={14} color="#059669" /><div><span style={infoLabel}>KM</span><br/><strong>{boat.distance?.toFixed(2) || 0}</strong></div></div>
         <div style={infoCardStyle}><Activity size={14} color="#2563eb" /><div><span style={infoLabel}>Sinal</span><br/><strong>{new Date(boat.last_updated).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}</strong></div></div>
+        <div style={infoCardStyle}><RefreshCw size={14} color="#f59e0b" /><div><span style={infoLabel}>Km/h</span><br/><strong>{boat.speed || 0}</strong></div></div>
       </div>
       <div style={{ marginBottom: '15px' }}>
         <div style={sectionTitleStyle}><Users size={16} /> Tripulação Atual</div>
@@ -638,6 +640,18 @@ export default function App() {
                     </div>
                     <button onClick={() => stopTracking()} style={{ background: '#ef4444', color: 'white', border: 'none', padding: '8px 15px', borderRadius: '10px', fontWeight: 'bold' }}>PARAR</button>
                   </div>
+                  
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px', marginBottom: '12px' }}>
+                    <div style={{ ...infoCardStyle, background: 'rgba(255,255,255,0.5)' }}>
+                      <Navigation size={18} color="#059669" />
+                      <div><span style={infoLabel}>Distância</span><br/><strong style={{ fontSize: '16px' }}>{boats.find(b => Number(b.id) === Number(trackingBoatId))?.distance?.toFixed(2) || '0.00'} km</strong></div>
+                    </div>
+                    <div style={{ ...infoCardStyle, background: 'rgba(255,255,255,0.5)' }}>
+                      <Activity size={18} color="#2563eb" />
+                      <div><span style={infoLabel}>Velocidade</span><br/><strong style={{ fontSize: '16px' }}>{boats.find(b => Number(b.id) === Number(trackingBoatId))?.speed || '0.0'} km/h</strong></div>
+                    </div>
+                  </div>
+
                   <div style={{ background: 'rgba(16,185,129,0.1)', padding: '10px', borderRadius: '12px', border: '1px solid rgba(16,185,129,0.2)' }}>
                     <div style={{ fontSize: '11px', color: '#065f46', fontWeight: 'bold', marginBottom: '4px', display: 'flex', alignItems: 'center', gap: '5px' }}>
                       <Users size={14}/> EQUIPE NO TRECHO {selectedExchangeIndex + 1}:
