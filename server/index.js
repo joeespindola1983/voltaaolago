@@ -140,6 +140,23 @@ app.post('/api/boats', async (req, res) => {
   }
 });
 
+app.put('/api/boats/:id', async (req, res) => {
+  const { id } = req.params;
+  const { name, type, nickname, pin, color, athletes, exchanges } = req.body;
+  try {
+    const result = await pool.query(
+      'UPDATE boats SET name = $1, type = $2, nickname = $3, pin = $4, color = $5, athletes = $6, exchanges = $7 WHERE id = $8 RETURNING *',
+      [name, type, nickname, pin, color, JSON.stringify(athletes || []), JSON.stringify(exchanges || []), id]
+    );
+    if (result.rows.length === 0) return res.status(404).json({ error: 'Barco não encontrado' });
+    io.emit('boat_updated', result.rows[0]);
+    res.json(result.rows[0]);
+  } catch (err) {
+    if (err.code === '23505') return res.status(400).json({ error: 'Este Nickname já está em uso.' });
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // Adicionar à fila de troca
 app.post('/api/boats/:id/queue', async (req, res) => {
   const { id } = req.params;

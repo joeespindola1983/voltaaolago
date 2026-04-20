@@ -154,6 +154,7 @@ export default function App() {
   const [athletes, setAthletes] = useState([]);
   const [exchanges, setExchanges] = useState([]);
   const [isRegistering, setIsRegistering] = useState(false);
+  const [editingBoatId, setEditingBoatId] = useState(null);
   const [selectedExchangeIndex, setSelectedExchangeIndex] = useState(0);
   const [crewInput, setCrewInput] = useState('');
   const [isTracking, setIsTracking] = useState(false);
@@ -360,7 +361,7 @@ export default function App() {
               <>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
                   <h2 style={{ margin: 0 }}>Barcos Cadastrados</h2>
-                  <button onClick={() => { setIsRegistering(true); setNickname(''); setBoatName(''); setPin(''); setAthletes([]); setExchanges([]); }} style={{ ...startBtnStyle, width: 'auto', padding: '10px 20px' }}>+ Novo Barco</button>
+                  <button onClick={() => { setIsRegistering(true); setEditingBoatId(null); setNickname(''); setBoatName(''); setPin(''); setAthletes([]); setExchanges([]); setBoatColor('#2563eb'); }} style={{ ...startBtnStyle, width: 'auto', padding: '10px 20px' }}>+ Novo Barco</button>
                 </div>
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
                   {boats.map(b => (
@@ -376,7 +377,7 @@ export default function App() {
                       <button onClick={() => {
                         const p = prompt('PIN de 2 dígitos:');
                         if (p === b.pin) {
-                          setBoatName(b.name); setNickname(b.nickname); setPin(b.pin); setAthletes(b.athletes || []); setExchanges(b.exchanges || []); setBoatType(b.type); setBoatColor(b.color || '#2563eb'); setIsRegistering(true);
+                          setEditingBoatId(b.id); setBoatName(b.name); setNickname(b.nickname); setPin(b.pin); setAthletes(b.athletes || []); setExchanges(b.exchanges || []); setBoatType(b.type); setBoatColor(b.color || '#2563eb'); setIsRegistering(true);
                         } else if (p !== null) alert('PIN incorreto!');
                       }} style={{ background: '#f1f5f9', border: 'none', padding: '10px 15px', borderRadius: '10px', fontSize: '12px', fontWeight: 'bold' }}>Gerenciar</button>
                     </div>
@@ -386,7 +387,7 @@ export default function App() {
             ) : (
               <div style={{ background: 'white', padding: '25px', borderRadius: '25px', boxShadow: '0 10px 25px rgba(0,0,0,0.1)', maxWidth: '500px', margin: '0 auto' }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
-                  <h2 style={{ margin: 0 }}>{nickname ? 'Editar Barco' : 'Novo Barco'}</h2>
+                  <h2 style={{ margin: 0 }}>{editingBoatId ? 'Editar Barco' : 'Novo Barco'}</h2>
                   <button onClick={() => setIsRegistering(false)} style={{ background: 'none', border: 'none' }}><X size={24} /></button>
                 </div>
                 
@@ -461,8 +462,13 @@ export default function App() {
                 <button onClick={async () => {
                   if (!nickname || !boatName || pin.length < 2) return alert('Nickname, Nome e PIN (2 dígitos) são obrigatórios!');
                   try {
-                    await axios.post(`${API_URL}/api/boats`, { name: boatName, type: boatType, nickname, pin, color: boatColor, athletes, exchanges });
-                    alert('Barco salvo com sucesso!'); setIsRegistering(false); fetchBoats();
+                    const payload = { name: boatName, type: boatType, nickname, pin, color: boatColor, athletes, exchanges };
+                    if (editingBoatId) {
+                      await axios.put(`${API_URL}/api/boats/${editingBoatId}`, payload);
+                    } else {
+                      await axios.post(`${API_URL}/api/boats`, payload);
+                    }
+                    alert('Barco salvo com sucesso!'); setIsRegistering(false); setEditingBoatId(null); fetchBoats();
                   } catch (err) { alert(err.response?.data?.error || 'Erro ao salvar'); }
                 }} style={{ ...startBtnStyle, marginTop: '20px' }}>Salvar Barco</button>
               </div>
