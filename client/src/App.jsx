@@ -142,6 +142,12 @@ export default function App() {
   const [boatName, setBoatName] = useState('');
   const [category, setCategory] = useState('');
   const [boatType, setBoatType] = useState('');
+  const [nickname, setNickname] = useState('');
+  const [pin, setPin] = useState('');
+  const [athletes, setAthletes] = useState([]);
+  const [exchanges, setExchanges] = useState([]);
+  const [isRegistering, setIsRegistering] = useState(false);
+  const [selectedExchangeIndex, setSelectedExchangeIndex] = useState(0);
   const [crewInput, setCrewInput] = useState('');
   const [isTracking, setIsTracking] = useState(false);
   const [trackingBoatId, setTrackingBoatId] = useState(null);
@@ -304,7 +310,12 @@ export default function App() {
         <div style={sectionTitleStyle}><Users size={16} /> Tripulação</div>
         <div style={crewBoxStyle}>{boat.current_crew?.join(', ') || 'Ninguém'}</div>
       </div>
-      <button onClick={() => { setView('track'); setBoatName(boat.name); setSelectedMapBoatId(null); }} style={{ ...startBtnStyle, marginTop: '10px', background: '#0f172a' }}>Assumir Barco</button>
+      <button onClick={() => { 
+        setView('track'); 
+        setNickname(boat.nickname || ''); 
+        setBoatName(boat.name); 
+        setSelectedMapBoatId(null); 
+      }} style={{ ...startBtnStyle, marginTop: '10px', background: '#0f172a' }}>Assumir Barco</button>
     </div>
   );
 
@@ -312,6 +323,7 @@ export default function App() {
     <div style={{ height: '100%', display: 'flex', flexDirection: 'column', background: '#f8fafc' }}>
       <nav style={{ background: '#1e3a8a', color: 'white', padding: '12px 10px', display: 'flex', justifyContent: 'space-around', zIndex: 1000, boxShadow: '0 2px 10px rgba(0,0,0,0.2)' }}>
         <button onClick={() => { setView('map'); setSelectedMapBoatId(null); setClusterModalBoats(null); }} style={navBtnStyle}><MapIcon size={22} /> Mapa</button>
+        <button onClick={() => { setView('boats'); setSelectedMapBoatId(null); setClusterModalBoats(null); }} style={navBtnStyle}><Ship size={22} /> Barcos</button>
         <button onClick={() => { setView('track'); setSelectedMapBoatId(null); setClusterModalBoats(null); }} style={navBtnStyle}><Play size={22} /> Transmitir</button>
       </nav>
 
@@ -335,6 +347,111 @@ export default function App() {
           </div>
         )}
 
+        {view === 'boats' && (
+          <div style={{ padding: '20px', overflowY: 'auto', height: '100%' }}>
+            {!isRegistering ? (
+              <>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
+                  <h2 style={{ margin: 0 }}>Barcos Cadastrados</h2>
+                  <button onClick={() => { setIsRegistering(true); setNickname(''); setBoatName(''); setPin(''); setAthletes([]); setExchanges([]); }} style={{ ...startBtnStyle, width: 'auto', padding: '10px 20px' }}>+ Novo Barco</button>
+                </div>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                  {boats.map(b => (
+                    <div key={b.id} style={{ background: 'white', padding: '15px', borderRadius: '15px', boxShadow: '0 2px 8px rgba(0,0,0,0.05)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                      <div>
+                        <div style={{ fontWeight: 'bold', color: '#1e3a8a' }}>{b.name}</div>
+                        <div style={{ fontSize: '12px', color: '#64748b' }}>@{b.nickname} • {b.type}</div>
+                        <div style={{ fontSize: '11px', color: '#94a3b8', marginTop: '4px' }}>{b.athletes?.length || 0} atletas • {b.exchanges?.length || 0} trechos</div>
+                      </div>
+                      <button onClick={() => {
+                        const p = prompt('PIN de 2 dígitos:');
+                        if (p === b.pin) {
+                          setBoatName(b.name); setNickname(b.nickname); setPin(b.pin); setAthletes(b.athletes || []); setExchanges(b.exchanges || []); setBoatType(b.type); setIsRegistering(true);
+                        } else if (p !== null) alert('PIN incorreto!');
+                      }} style={{ background: '#f1f5f9', border: 'none', padding: '10px 15px', borderRadius: '10px', fontSize: '12px', fontWeight: 'bold' }}>Gerenciar</button>
+                    </div>
+                  ))}
+                </div>
+              </>
+            ) : (
+              <div style={{ background: 'white', padding: '25px', borderRadius: '25px', boxShadow: '0 10px 25px rgba(0,0,0,0.1)', maxWidth: '500px', margin: '0 auto' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
+                  <h2 style={{ margin: 0 }}>{nickname ? 'Editar Barco' : 'Novo Barco'}</h2>
+                  <button onClick={() => setIsRegistering(false)} style={{ background: 'none', border: 'none' }}><X size={24} /></button>
+                </div>
+                
+                <label style={labelStyle}>Nickname (@id único alfanumérico)</label>
+                <input placeholder="ex: oc6lago" value={nickname} onChange={e => setNickname(e.target.value.toLowerCase().replace(/[^a-z0-9]/g, ''))} style={inputStyle} />
+                
+                <label style={labelStyle}>Nome do Barco</label>
+                <input placeholder="Ex: Vento Leste" value={boatName} onChange={e => setBoatName(e.target.value)} style={inputStyle} />
+                
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
+                  <div>
+                    <label style={labelStyle}>PIN (2 dígitos)</label>
+                    <input type="password" maxLength={2} placeholder="00" value={pin} onChange={e => setPin(e.target.value.replace(/[^0-9]/g, ''))} style={inputStyle} />
+                  </div>
+                  <div>
+                    <label style={labelStyle}>Tipo</label>
+                    <select style={inputStyle} onChange={(e) => setBoatType(e.target.value)} value={boatType}>
+                      <option value="">Selecione...</option>
+                      {Object.values(BOAT_CATEGORIES).flat().map(t => <option key={t} value={t}>{t}</option>)}
+                    </select>
+                  </div>
+                </div>
+
+                <div style={{ marginTop: '20px', borderTop: '1px solid #f1f5f9', paddingTop: '20px' }}>
+                  <h3 style={{ margin: '0 0 10px 0', fontSize: '15px', display: 'flex', alignItems: 'center', gap: '8px' }}><Users size={18}/> Lista de Atletas</h3>
+                  <div style={{ display: 'flex', gap: '8px', marginBottom: '12px' }}>
+                    <input placeholder="Nome do Atleta" value={crewInput} onChange={e => setCrewInput(e.target.value)} style={{ ...inputStyle, marginBottom: 0 }} />
+                    <button onClick={() => { if (crewInput) { setAthletes([...athletes, crewInput]); setCrewInput(''); } }} style={{ background: '#1e3a8a', color: 'white', border: 'none', borderRadius: '10px', padding: '0 20px', fontWeight: 'bold' }}>+</button>
+                  </div>
+                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px' }}>
+                    {athletes.map((a, i) => (
+                      <span key={i} style={{ background: '#f1f5f9', padding: '6px 12px', borderRadius: '20px', fontSize: '12px', display: 'flex', alignItems: 'center', gap: '6px', border: '1px solid #e2e8f0' }}>
+                        {a} <X size={14} onClick={() => setAthletes(athletes.filter((_, idx) => idx !== i))} style={{ cursor: 'pointer', color: '#94a3b8' }} />
+                      </span>
+                    ))}
+                  </div>
+                </div>
+
+                <div style={{ marginTop: '20px', borderTop: '1px solid #f1f5f9', paddingTop: '20px' }}>
+                  <h3 style={{ margin: '0 0 10px 0', fontSize: '15px', display: 'flex', alignItems: 'center', gap: '8px' }}><RefreshCw size={18}/> Trechos (Trocas)</h3>
+                  <button onClick={() => setExchanges([...exchanges, []])} style={{ background: '#f8fafc', border: '2px dashed #e2e8f0', width: '100%', padding: '12px', borderRadius: '12px', marginBottom: '15px', fontSize: '13px', color: '#64748b', fontWeight: 'bold' }}>+ Adicionar Novo Trecho</button>
+                  
+                  {exchanges.map((ex, exIdx) => (
+                    <div key={exIdx} style={{ background: '#f8fafc', padding: '15px', borderRadius: '15px', marginBottom: '12px', border: '1px solid #e2e8f0' }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '10px' }}>
+                        <strong style={{ fontSize: '14px', color: '#1e3a8a' }}>Trecho {exIdx + 1}</strong>
+                        <button onClick={() => setExchanges(exchanges.filter((_, idx) => idx !== exIdx))} style={{ background: 'none', border: 'none', color: '#ef4444' }}><Trash2 size={16} /></button>
+                      </div>
+                      <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px' }}>
+                        {athletes.length === 0 && <div style={{ fontSize: '11px', color: '#94a3b8', fontStyle: 'italic' }}>Adicione atletas acima primeiro</div>}
+                        {athletes.map(a => (
+                          <button key={a} onClick={() => {
+                            const isIncluded = ex.includes(a);
+                            setExchanges(exchanges.map((e, idx) => idx === exIdx ? (isIncluded ? e.filter(name => name !== a) : [...e, a]) : e));
+                          }} style={{ padding: '6px 10px', borderRadius: '10px', fontSize: '11px', fontWeight: 'bold', cursor: 'pointer', border: 'none', transition: 'all 0.2s', background: ex.includes(a) ? '#1e3a8a' : '#fff', color: ex.includes(a) ? '#fff' : '#64748b', boxShadow: ex.includes(a) ? '0 2px 5px rgba(30,58,138,0.3)' : 'inset 0 0 0 1px #cbd5e1' }}>
+                            {a}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+
+                <button onClick={async () => {
+                  if (!nickname || !boatName || pin.length < 2) return alert('Nickname, Nome e PIN (2 dígitos) são obrigatórios!');
+                  try {
+                    await axios.post(`${API_URL}/api/boats`, { name: boatName, type: boatType, nickname, pin, athletes, exchanges });
+                    alert('Barco salvo com sucesso!'); setIsRegistering(false); fetchBoats();
+                  } catch (err) { alert(err.response?.data?.error || 'Erro ao salvar'); }
+                }} style={{ ...startBtnStyle, marginTop: '20px' }}>Salvar Barco</button>
+              </div>
+            )}
+          </div>
+        )}
+
         {view === 'map' && (
           <>
             <div style={{ flex: selectedMapBoatId ? '0 0 55%' : '1 1 100%', transition: 'all 0.3s ease' }}>
@@ -355,27 +472,52 @@ export default function App() {
           <div style={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
             {!isTracking ? (
               <div style={{ padding: '30px 20px', overflowY: 'auto' }}>
-                <div style={{ background: 'white', padding: '25px', borderRadius: '20px', boxShadow: '0 4px 15px rgba(0,0,0,0.05)', maxWidth: '500px', margin: '0 auto' }}>
-                  <div style={{ display: 'flex', justifyContent: 'space-between' }}><Anchor size={40} color="#1e3a8a" />{boatName && <button onClick={() => setBoatName('')} style={{ background: '#f1f5f9', border: 'none', borderRadius: '8px', padding: '8px 12px', fontSize: '12px' }}>Limpar</button>}</div>
-                  <h2 style={{ margin: '10px 0 5px 0' }}>Rastreador GPS</h2>
-                  <input placeholder="Nome do Barco" value={boatName} onChange={e => setBoatName(e.target.value)} style={inputStyle} />
-                  {boats.find(b => b.name.toLowerCase() === boatName.toLowerCase()) ? (
-                    <div style={{ background: '#f8fafc', padding: '15px', borderRadius: '12px', border: '1px solid #e2e8f0', marginTop: '15px', textAlign: 'left' }}>
-                      <div style={{ color: '#059669', fontWeight: 'bold', fontSize: '14px', marginBottom: '10px' }}>✓ {boats.find(b => b.name.toLowerCase() === boatName.toLowerCase()).type}</div>
-                      <label style={labelStyle}>Sua Equipe</label>
-                      <input placeholder="Nomes..." value={crewInput} onChange={e => setCrewInput(e.target.value)} style={inputStyle} />
-                      <div style={{ display: 'flex', gap: '10px' }}>
-                        <button onClick={() => axios.post(`${API_URL}/api/boats/${boats.find(b => b.name.toLowerCase() === boatName.toLowerCase()).id}/queue`, { crew: crewInput.split(',').map(s => s.trim()) }).then(() => alert('Fila!'))} style={{ ...startBtnStyle, background: '#475569', flex: 1 }}>Fila</button>
-                        <button onClick={() => axios.post(`${API_URL}/api/boats/${boats.find(b => b.name.toLowerCase() === boatName.toLowerCase()).id}/take_control`, { new_crew: crewInput.split(',').map(s => s.trim()) }).then(() => activateHardwareGPS(boats.find(b => b.name.toLowerCase() === boatName.toLowerCase()).id))} style={{ ...startBtnStyle, flex: 1 }}>Assumir</button>
-                      </div>
-                    </div>
+                <div style={{ background: 'white', padding: '25px', borderRadius: '25px', boxShadow: '0 10px 30px rgba(0,0,0,0.05)', maxWidth: '500px', margin: '0 auto' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '15px' }}>
+                    <Anchor size={40} color="#1e3a8a" />
+                    {trackingBoatId && <button onClick={() => { setTrackingBoatId(null); setNickname(''); setPin(''); }} style={{ background: '#f1f5f9', border: 'none', padding: '8px 15px', borderRadius: '10px', fontSize: '12px', fontWeight: 'bold' }}>Sair</button>}
+                  </div>
+                  
+                  {!trackingBoatId ? (
+                    <>
+                      <h2 style={{ margin: '0 0 5px 0' }}>Acesso ao Barco</h2>
+                      <p style={{ fontSize: '13px', color: '#64748b', marginBottom: '20px' }}>Identifique seu barco para começar a transmitir.</p>
+                      
+                      <label style={labelStyle}>Nickname (@id único)</label>
+                      <input placeholder="ex: oc6lago" value={nickname} onChange={e => setNickname(e.target.value)} style={inputStyle} />
+                      
+                      <label style={labelStyle}>PIN de 2 dígitos</label>
+                      <input type="password" maxLength={2} placeholder="00" value={pin} onChange={e => setPin(e.target.value)} style={inputStyle} />
+                      
+                      <button onClick={async () => {
+                        try {
+                          const res = await axios.post(`${API_URL}/api/boats/auth`, { nickname, pin });
+                          setBoatName(res.data.name); setBoatType(res.data.type); setAthletes(res.data.athletes || []); setExchanges(res.data.exchanges || []);
+                          setTrackingBoatId(res.data.id); trackingBoatIdRef.current = res.data.id;
+                        } catch (err) { alert('Credenciais inválidas!'); }
+                      }} style={startBtnStyle}>Verificar Credenciais</button>
+                    </>
                   ) : (
-                    <div style={{ marginTop: '15px', textAlign: 'left' }}>
-                      <select style={inputStyle} onChange={(e) => { setCategory(e.target.value); setBoatType(''); }} value={category}><option value="">Categoria...</option>{Object.keys(BOAT_CATEGORIES).map(cat => <option key={cat} value={cat}>{cat}</option>)}</select>
-                      {category && <select style={inputStyle} onChange={(e) => setBoatType(e.target.value)} value={boatType}><option value="">Tipo...</option>{BOAT_CATEGORIES[category].map(type => <option key={type} value={type}>{type}</option>)}</select>}
-                      <label style={{ ...labelStyle, marginTop: '10px' }}>Sua Equipe</label>
-                      <input placeholder="Nomes..." value={crewInput} onChange={e => setCrewInput(e.target.value)} style={inputStyle} />
-                      <button onClick={startNewTracking} style={startBtnStyle}>Criar e Iniciar</button>
+                    <div style={{ textAlign: 'left' }}>
+                      <h2 style={{ margin: '0 0 5px 0' }}>{boatName}</h2>
+                      <div style={{ fontSize: '14px', color: '#059669', fontWeight: 'bold', marginBottom: '20px' }}>✓ Acesso Autorizado</div>
+                      
+                      <h3 style={{ margin: '0 0 12px 0', fontSize: '16px', borderTop: '1px solid #f1f5f9', paddingTop: '20px' }}>Selecione o Trecho Atual</h3>
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                        {exchanges.length === 0 && <p style={{ fontSize: '13px', color: '#ef4444' }}>Nenhum trecho configurado pelo capitão na aba "Barcos".</p>}
+                        {exchanges.map((ex, i) => (
+                          <button key={i} onClick={() => setSelectedExchangeIndex(i)} style={{ padding: '15px', borderRadius: '15px', textAlign: 'left', cursor: 'pointer', transition: 'all 0.2s', background: selectedExchangeIndex === i ? '#ecfdf5' : '#fff', border: selectedExchangeIndex === i ? '2px solid #10b981' : '1px solid #e2e8f0', boxShadow: selectedExchangeIndex === i ? '0 4px 12px rgba(16,185,129,0.1)' : 'none' }}>
+                            <div style={{ fontWeight: 'bold', color: selectedExchangeIndex === i ? '#065f46' : '#1e293b' }}>Trecho {i + 1}</div>
+                            <div style={{ fontSize: '12px', color: '#64748b', marginTop: '4px' }}>{ex.join(', ')}</div>
+                          </button>
+                        ))}
+                      </div>
+                      <button onClick={async () => {
+                        if (exchanges.length === 0) return alert('O capitão precisa configurar os trechos primeiro!');
+                        const selectedCrew = exchanges[selectedExchangeIndex];
+                        await axios.post(`${API_URL}/api/boats/${trackingBoatId}/take_control`, { new_crew: selectedCrew });
+                        activateHardwareGPS(trackingBoatId);
+                      }} style={{ ...startBtnStyle, marginTop: '20px', background: '#10b981' }}>Assumir Trecho e Iniciar GPS</button>
                     </div>
                   )}
                 </div>

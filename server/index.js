@@ -53,6 +53,10 @@ async function initDb() {
     await client.query(`ALTER TABLE boats ADD COLUMN IF NOT EXISTS distance DOUBLE PRECISION DEFAULT 0;`);
     await client.query(`ALTER TABLE boats ADD COLUMN IF NOT EXISTS current_crew JSONB DEFAULT '[]'::jsonb;`);
     await client.query(`ALTER TABLE boats ADD COLUMN IF NOT EXISTS crew_queue JSONB DEFAULT '[]'::jsonb;`);
+    await client.query(`ALTER TABLE boats ADD COLUMN IF NOT EXISTS nickname VARCHAR(50) UNIQUE;`);
+    await client.query(`ALTER TABLE boats ADD COLUMN IF NOT EXISTS pin VARCHAR(4);`);
+    await client.query(`ALTER TABLE boats ADD COLUMN IF NOT EXISTS athletes JSONB DEFAULT '[]'::jsonb;`);
+    await client.query(`ALTER TABLE boats ADD COLUMN IF NOT EXISTS exchanges JSONB DEFAULT '[]'::jsonb;`);
     
     client.release();
     console.log("Tabelas prontas e atualizadas.");
@@ -108,16 +112,29 @@ app.get('/api/boats', async (req, res) => {
   }
 });
 
+// Autenticação de Barco (Nickname + PIN)
+app.post('/api/boats/auth', async (req, res) => {
+  const { nickname, pin } = req.body;
+  try {
+    const result = await pool.query('SELECT * FROM boats WHERE LOWER(nickname) = LOWER($1) AND pin = $2', [nickname, pin]);
+    if (result.rows.length === 0) return res.status(401).json({ error: 'Nickname ou PIN incorretos' });
+    res.json(result.rows[0]);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 app.post('/api/boats', async (req, res) => {
-  const { name, type, current_crew } = req.body;
+  const { name, type, nickname, pin, athletes, exchanges } = req.body;
   try {
     const result = await pool.query(
-      'INSERT INTO boats (name, type, current_crew) VALUES ($1, $2, $3) RETURNING *',
-      [name, type, JSON.stringify(current_crew || [])]
+      'INSERT INTO boats (name, type, nickname, pin, athletes, exchanges) VALUES ($1, $2, $3, $4, $5, $6) RETURNING *',
+      [name, type, nickname, pin, JSON.stringify(athletes || []), JSON.stringify(exchanges || [])]
     );
     io.emit('boat_updated', result.rows[0]);
     res.status(201).json(result.rows[0]);
   } catch (err) {
+    if (err.code === '23505') return res.status(400).json({ error: 'Este Nickname já está em uso.' });
     res.status(500).json({ error: err.message });
   }
 });
