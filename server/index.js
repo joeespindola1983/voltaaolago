@@ -18,12 +18,23 @@ const io = new Server(server, {
   }
 });
 
-// Configuração do Banco de Dados
+// Configuração do Banco de Dados com fallback para debug
+const connectionString = process.env.DATABASE_URL;
+
 const pool = new Pool({
-  connectionString: process.env.DATABASE_URL,
+  connectionString: connectionString,
   ssl: {
-    rejectUnauthorized: false
+    rejectUnauthorized: false // Obrigatório para Render
   }
+});
+
+// Testar conexão imediatamente
+pool.connect((err, client, release) => {
+  if (err) {
+    return console.error('ERRO CRÍTICO: Não foi possível conectar ao banco de dados!', err.stack);
+  }
+  console.log('Conexão com o Banco de Dados estabelecida com sucesso.');
+  release();
 });
 
 // Inicialização das tabelas
@@ -41,20 +52,22 @@ async function initDb() {
         battery INTEGER
       );
     `);
-    console.log("Banco de Dados ok.");
+    console.log("Tabela 'boats' verificada/criada.");
   } catch (err) {
-    console.error("Erro DB:", err);
+    console.error("Erro ao criar tabelas:", err);
   }
 }
 initDb();
 
 // --- Rotas API ---
+
 app.get('/api/boats', async (req, res) => {
   try {
     const result = await pool.query('SELECT * FROM boats WHERE active = true ORDER BY name ASC');
     res.json(result.rows);
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    console.error('Erro na rota /api/boats:', err.message);
+    res.status(500).json({ error: 'Erro no Banco de Dados', details: err.message });
   }
 });
 
@@ -67,24 +80,22 @@ app.post('/api/boats', async (req, res) => {
     );
     res.status(201).json(result.rows[0]);
   } catch (err) {
+    console.error('Erro ao criar barco:', err.message);
     res.status(500).json({ error: err.message });
   }
 });
 
-// --- SERVIR FRONTEND ESTÁTICO ---
-// Servir os arquivos da build do React
+// Servir Frontend
 app.use(express.static(path.join(__dirname, '../client/dist')));
-
-// Qualquer outra rota cai no index.html do React (SPA)
 app.get('*', (req, res) => {
   res.sendFile(path.join(__dirname, '../client/dist/index.html'));
 });
 
-// --- Socket.io ---
+// Socket.io
 io.on('connection', (socket) => {
   socket.on('update_location', async (data) => {
     const { boatId, lat, lng, battery } = data;
-    if (!boatId || !lat || !lng) return;
+    if (!boatId) return;
     try {
       await pool.query(
         'UPDATE boats SET lat = $1, lng = $2, battery = $3, last_updated = CURRENT_TIMESTAMP WHERE id = $4',
@@ -92,7 +103,7 @@ io.on('connection', (socket) => {
       );
       io.emit('location_changed', { boatId, lat, lng, battery, lastUpdated: new Date() });
     } catch (err) {
-      console.error('Erro Socket update:', err);
+      console.error('Erro Socket:', err.message);
     }
   });
 });
