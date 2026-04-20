@@ -223,7 +223,31 @@ export default function App() {
   const [syncStatus, setSyncStatus] = useState('idle');
   const [nextSyncCountdown, setNextSyncCountdown] = useState(0);
   const [gpsAccuracy, setGpsAccuracy] = useState(null);
+  const [isSocketConnected, setIsSocketConnected] = useState(socket.connected);
   const isTrackingRef = useRef(false);
+
+  useEffect(() => {
+    const onConnect = () => setIsSocketConnected(true);
+    const onDisconnect = () => setIsSocketConnected(false);
+    socket.on('connect', onConnect);
+    socket.on('disconnect', onDisconnect);
+    return () => {
+      socket.off('connect', onConnect);
+      socket.off('disconnect', onDisconnect);
+    };
+  }, []);
+
+  // Flush buffer quando a internet voltar
+  useEffect(() => {
+    if (isSocketConnected && isTracking) {
+      const buffer = JSON.parse(localStorage.getItem('vtl_gps_buffer') || '[]');
+      if (buffer.length > 0) {
+        buffer.forEach(data => socket.emit('update_location', data));
+        localStorage.removeItem('vtl_gps_buffer');
+        console.log(`Sincronizados ${buffer.length} pontos offline.`);
+      }
+    }
+  }, [isSocketConnected, isTracking]);
   const trackingBoatIdRef = useRef(trackingBoatId);
   const watchIdRef = useRef(null);
   const lastSentRef = useRef(0);
@@ -379,14 +403,23 @@ export default function App() {
             }
           } catch (e) {}
 
-          socket.emit('update_location', { 
+          const payload = { 
             boatId: id, 
             lat: pos.coords.latitude, 
             lng: pos.coords.longitude,
             speed: pos.coords.speed,
             heading: pos.coords.heading,
             batteryLevel
-          });
+          };
+
+          if (socket.connected) {
+            socket.emit('update_location', payload);
+          } else {
+            const buffer = JSON.parse(localStorage.getItem('vtl_gps_buffer') || '[]');
+            buffer.push(payload);
+            localStorage.setItem('vtl_gps_buffer', JSON.stringify(buffer.slice(-50))); // Guardar últimos 50 pontos
+          }
+
           setGpsAccuracy(pos.coords.accuracy);
           lastSentRef.current = now;
         }
@@ -848,7 +881,8 @@ export default function App() {
                       animation: (syncStatus === 'sending' || syncStatus === 'idle') ? 'pulse 1s infinite' : 'none'
                     }} />
                     <span style={{ fontSize: '14px', fontWeight: 'bold', color: '#1e293b' }}>
-                      {syncStatus === 'sending' ? '📡 Sincronizando agora...' : 
+                      {!isSocketConnected ? '⚠️ Offline - Salvando no celular' :
+                       syncStatus === 'sending' ? '📡 Sincronizando agora...' : 
                        syncStatus === 'error' ? '⚠️ Erro de GPS' :
                        syncStatus === 'ok' ? '✅ Sincronizado agora!' :
                        nextSyncCountdown > 0 ? `Próxima sincronização em ${nextSyncCountdown}s` :
