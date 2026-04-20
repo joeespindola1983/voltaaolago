@@ -3,13 +3,14 @@ import { io } from 'socket.io-client';
 import { MapContainer, TileLayer, Marker, Popup, useMap } from 'react-leaflet';
 import L from 'leaflet';
 import axios from 'axios';
-import { Anchor, Map as MapIcon, Settings, Play, Square, Battery, RefreshCw } from 'lucide-react';
+import { Anchor, Map as MapIcon, Settings, Play, Battery, RefreshCw } from 'lucide-react';
 
 // --- CONFIGURAÇÕES ---
-// Substitua pela URL do seu Backend no Render (ex: https://voltaaolago-server.onrender.com)
+// O domínio fornecido pelo usuário para produção
+const PROD_URL = 'https://voltaaolago.row.app.br'; 
 const API_URL = window.location.hostname === 'localhost' 
   ? 'http://localhost:3001' 
-  : 'https://voltaaolago-server.onrender.com';
+  : PROD_URL;
 
 const socket = io(API_URL);
 
@@ -79,13 +80,13 @@ export default function App() {
       // 1. Solicitar Wake Lock (Manter CPU ativa)
       if ('wakeLock' in navigator) {
         wakeLockRef.current = await navigator.wakeLock.request('screen');
-        console.log('Wake Lock ativo!');
       }
 
       // 2. Play Silent Audio (Truque para iOS não suspender a aba)
+      // Gerando um buffer de áudio silencioso básico
       const audio = new Audio('data:audio/wav;base64,UklGRigAAABXQVZFZm10IBIAAAABAAEARKwAAIhYAQACABAAAABkYXRhAgAAAAEA');
       audio.loop = true;
-      audio.play();
+      audio.play().catch(e => console.log("Audio play blocked, but tracking continues."));
       audioRef.current = audio;
 
       // 3. Iniciar Ciclo de GPS
@@ -101,7 +102,7 @@ export default function App() {
     setIsTracking(false);
     if (wakeLockRef.current) wakeLockRef.current.release();
     if (audioRef.current) audioRef.current.pause();
-    window.location.reload(); // Simples reset
+    window.location.reload(); 
   };
 
   const trackLocation = () => {
@@ -113,10 +114,12 @@ export default function App() {
         setLastPos({ lat: latitude, lng: longitude });
 
         // Tentar pegar bateria
-        if (navigator.getBattery) {
-          const bat = await navigator.getBattery();
-          setBattery(Math.round(bat.level * 100));
-        }
+        try {
+          if (navigator.getBattery) {
+            const bat = await navigator.getBattery();
+            setBattery(Math.round(bat.level * 100));
+          }
+        } catch(e) {}
 
         socket.emit('update_location', {
           boatId: selectedBoatId,
@@ -125,10 +128,14 @@ export default function App() {
           battery: battery
         });
 
-        // Agendar próxima leitura (1 minuto para economia de bateria)
+        // Agendar próxima leitura (1 minuto)
         if (isTracking) setTimeout(trackLocation, 60000);
       },
-      (err) => console.error(err),
+      (err) => {
+        console.error(err);
+        // Tentar novamente em 10 segundos se falhar
+        if (isTracking) setTimeout(trackLocation, 10000);
+      },
       { enableHighAccuracy: true, timeout: 20000, maximumAge: 0 }
     );
   };
@@ -168,7 +175,7 @@ export default function App() {
           <div style={{ padding: '20px', textAlign: 'center' }}>
             <Anchor size={48} color="#1e3a8a" />
             <h2>Rastreador do Barco</h2>
-            <p>Selecione seu barco na lista abaixo para começar a transmitir a localização para o mapa público.</p>
+            <p>Selecione seu barco para começar a transmitir.</p>
             
             {!isTracking ? (
               <>
@@ -187,7 +194,7 @@ export default function App() {
                 <div style={{ fontSize: '24px', fontWeight: 'bold', color: '#059669' }}>RASTREAMENTO ATIVO</div>
                 <div style={{ margin: '20px 0' }}>
                   <p><RefreshCw size={16} /> Última: {new Date().toLocaleTimeString()}</p>
-                  <p><Battery size={16} /> Bateria: {battery}%</p>
+                  <p><Battery size={16} /> Bateria: {battery || '?'}%</p>
                   <p>Lat: {lastPos?.lat.toFixed(5)} | Lng: {lastPos?.lng.toFixed(5)}</p>
                 </div>
                 <div style={{ background: '#fef3c7', padding: '10px', borderRadius: '8px', fontSize: '14px' }}>
@@ -214,9 +221,13 @@ function AdminPanel({ fetchBoats, boats }) {
 
   const createBoat = async () => {
     if (!name) return;
-    await axios.post(`${API_URL}/api/boats`, { name, type });
-    setName('');
-    fetchBoats();
+    try {
+      await axios.post(`${API_URL}/api/boats`, { name, type });
+      setName('');
+      fetchBoats();
+    } catch (e) {
+      alert("Erro ao criar barco. Verifique o backend.");
+    }
   };
 
   return (
