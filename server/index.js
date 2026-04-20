@@ -104,8 +104,24 @@ async function initDb() {
       );
     `);
     
+    // Tabela para configurações globais (persistência de estado da prova)
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS global_config (
+        key VARCHAR(50) PRIMARY KEY,
+        value JSONB
+      );
+    `);
+    
     client.release();
     console.log("Tabelas prontas e atualizadas.");
+
+    // Carregar configurações do banco para a memória
+    const configRes = await pool.query('SELECT * FROM global_config');
+    configRes.rows.forEach(row => {
+      if (row.key === 'relay_timeout') globalRelayTimeout = row.value.val;
+      if (row.key === 'race_start_time') raceStartTime = row.value.val;
+      if (row.key === 'last_broadcast') lastBroadcast = row.value;
+    });
   } catch (err) {
     console.error("ERRO AO INICIAR BANCO:", err.message);
   }
@@ -140,20 +156,27 @@ app.get('/api/config', (req, res) => {
   res.json({ relayTimeout: globalRelayTimeout, raceStartTime, lastBroadcast });
 });
 
-app.post('/api/config', (req, res) => {
+app.post('/api/config', async (req, res) => {
   const { relayTimeout, raceStartTime: newStartTime, broadcast } = req.body;
-  if (relayTimeout) {
-    globalRelayTimeout = parseInt(relayTimeout) || 1;
+  try {
+    if (relayTimeout) {
+      globalRelayTimeout = parseInt(relayTimeout) || 1;
+      await pool.query('INSERT INTO global_config (key, value) VALUES ($1, $2) ON CONFLICT (key) DO UPDATE SET value = $2', ['relay_timeout', { val: globalRelayTimeout }]);
+    }
+    if (newStartTime !== undefined) {
+      raceStartTime = newStartTime;
+      await pool.query('INSERT INTO global_config (key, value) VALUES ($1, $2) ON CONFLICT (key) DO UPDATE SET value = $2', ['race_start_time', { val: raceStartTime }]);
+    }
+    if (broadcast !== undefined) {
+      lastBroadcast = { message: broadcast, timestamp: broadcast ? Date.now() : null };
+      await pool.query('INSERT INTO global_config (key, value) VALUES ($1, $2) ON CONFLICT (key) DO UPDATE SET value = $2', ['last_broadcast', lastBroadcast]);
+      io.emit('broadcast_received', lastBroadcast);
+    }
+    io.emit('config_updated', { relayTimeout: globalRelayTimeout, raceStartTime, lastBroadcast });
+    res.json({ success: true, relayTimeout: globalRelayTimeout, raceStartTime, lastBroadcast });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
   }
-  if (newStartTime !== undefined) {
-    raceStartTime = newStartTime;
-  }
-  if (broadcast !== undefined) {
-    lastBroadcast = { message: broadcast, timestamp: broadcast ? Date.now() : null };
-    io.emit('broadcast_received', lastBroadcast);
-  }
-  io.emit('config_updated', { relayTimeout: globalRelayTimeout, raceStartTime, lastBroadcast });
-  res.json({ success: true, relayTimeout: globalRelayTimeout, raceStartTime, lastBroadcast });
 });
 
 app.get('/api/boats', async (req, res) => {
