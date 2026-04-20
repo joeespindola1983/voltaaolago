@@ -82,7 +82,11 @@ export default function App() {
 
   useEffect(() => {
     const timer = setInterval(() => setCurrentTime(Date.now()), 30000);
-    return () => clearInterval(timer);
+    const fetchTimer = setInterval(() => fetchBoats(), 60000); // Polling agressivo de fallback
+    return () => {
+      clearInterval(timer);
+      clearInterval(fetchTimer);
+    };
   }, []);
 
   useEffect(() => {
@@ -94,21 +98,36 @@ export default function App() {
     });
 
     socket.on('location_changed', (data) => {
-      setBoats(prev => prev.map(b => b.id === data.boatId ? { ...b, ...data, last_updated: data.lastUpdated } : b));
+      setBoats(prev => {
+        if (!prev.find(b => b.id === data.boatId)) {
+          fetchBoats(); // Se receber localização de barco novo, recarrega a lista
+          return prev;
+        }
+        return prev.map(b => b.id === data.boatId ? { ...b, ...data, last_updated: data.lastUpdated } : b);
+      });
     });
+
     socket.on('boat_updated', (updatedBoat) => {
-      setBoats(prev => prev.map(b => b.id === updatedBoat.id ? { ...b, ...updatedBoat } : b));
+      setBoats(prev => {
+        if (prev.find(b => b.id === updatedBoat.id)) {
+          return prev.map(b => b.id === updatedBoat.id ? { ...b, ...updatedBoat } : b);
+        }
+        return [...prev, updatedBoat]; // Adiciona barco novo se não existir
+      });
     });
+
     socket.on('boat_deleted', (data) => {
       setBoats(prev => prev.filter(b => b.id !== data.id));
       if (selectedMapBoatId === data.id) setSelectedMapBoatId(null);
     });
+
     socket.on('control_taken', (data) => {
       if (isTracking && trackingBoatId === data.boatId) {
         alert("⚠️ Outra equipe assumiu o controle deste barco!");
         stopTracking(true);
       }
     });
+
     return () => {
       socket.off('config_updated');
       socket.off('location_changed'); 

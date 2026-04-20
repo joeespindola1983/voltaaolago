@@ -115,6 +115,7 @@ app.post('/api/boats', async (req, res) => {
       'INSERT INTO boats (name, type, current_crew) VALUES ($1, $2, $3) RETURNING *',
       [name, type, JSON.stringify(current_crew || [])]
     );
+    io.emit('boat_updated', result.rows[0]);
     res.status(201).json(result.rows[0]);
   } catch (err) {
     res.status(500).json({ error: err.message });
