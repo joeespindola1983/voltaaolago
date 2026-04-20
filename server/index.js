@@ -76,6 +76,18 @@ async function initDb() {
       );
     `);
     
+    // Tabela para armazenar o log de trocas (tempos por trecho)
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS exchange_logs (
+        id SERIAL PRIMARY KEY,
+        boat_id INTEGER REFERENCES boats(id) ON DELETE CASCADE,
+        exchange_index INTEGER NOT NULL,
+        crew JSONB NOT NULL,
+        start_time TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        end_time TIMESTAMP
+      );
+    `);
+    
     client.release();
     console.log("Tabelas prontas e atualizadas.");
   } catch (err) {
@@ -211,23 +223,35 @@ app.post('/api/boats/:id/queue', async (req, res) => {
   }
 });
 
-// Tomar controle do barco
+// Tomar controle do barco (Troca de tripulação)
 app.post('/api/boats/:id/take_control', async (req, res) => {
   const { id } = req.params;
-  const { new_crew } = req.body;
+  const { new_crew, exchange_index } = req.body;
   try {
     const boatRes = await pool.query('SELECT crew_queue FROM boats WHERE id = $1', [id]);
     if (boatRes.rows.length === 0) return res.status(404).json({ error: 'Barco não encontrado' });
-    
-    let queue = boatRes.rows[0].crew_queue || [];
-    // Tenta remover essa crew da fila (simplificado)
-    queue = queue.filter(q => JSON.stringify(q) !== JSON.stringify(new_crew));
-    
-    const result = await pool.query(
-      'UPDATE boats SET current_crew = $1, crew_queue = $2 WHERE id = $3 RETURNING *',
-      [JSON.stringify(new_crew), JSON.stringify(queue), id]
+
+    // Finalizar o trecho anterior (se houver)
+    await pool.query(
+      'UPDATE exchange_logs SET end_time = CURRENT_TIMESTAMP WHERE boat_id = $1 AND end_time IS NULL',
+      [id]
     );
-    
+
+    // Iniciar o novo trecho no log
+    if (exchange_index !== undefined) {
+      await pool.query(
+        'INSERT INTO exchange_logs (boat_id, exchange_index, crew) VALUES ($1, $2, $3)',
+        [id, exchange_index, JSON.stringify(new_crew || [])]
+      );
+    }
+
+    let queue = boatRes.rows[0].crew_queue || [];
+    queue = queue.filter(q => JSON.stringify(q) !== JSON.stringify(new_crew));
+
+    const result = await pool.query(
+      'UPDATE boats SET current_crew = $1, crew_queue = $2, last_updated = CURRENT_TIMESTAMP WHERE id = $3 RETURNING *',
+      [JSON.stringify(new_crew), JSON.stringify(queue), id]
+    );    
     // Notificar clientes antigos para pararem de transmitir
     io.emit('control_taken', { boatId: parseInt(id), timestamp: Date.now() });
     // Atualizar dados gerais do barco
@@ -257,9 +281,23 @@ app.post('/api/boats/:id/reset', async (req, res) => {
   try {
     await pool.query('UPDATE boats SET distance = 0, speed = 0, lat = NULL, lng = NULL, sos_active = false WHERE id = $1', [id]);
     await pool.query('DELETE FROM location_history WHERE boat_id = $1', [id]);
+    await pool.query('DELETE FROM exchange_logs WHERE boat_id = $1', [id]);
     const updated = await pool.query('SELECT * FROM boats WHERE id = $1', [id]);
     io.emit('boat_updated', updated.rows[0]);
     res.json({ success: true });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Buscar logs de trechos de um barco
+app.get('/api/boats/:id/splits', async (req, res) => {
+  try {
+    const result = await pool.query(
+      'SELECT * FROM exchange_logs WHERE boat_id = $1 ORDER BY exchange_index ASC',
+      [req.params.id]
+    );
+    res.json(result.rows);
   } catch (err) {
     res.status(500).json({ error: err.message });
   }

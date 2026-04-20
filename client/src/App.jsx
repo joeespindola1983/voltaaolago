@@ -194,6 +194,7 @@ export default function App() {
   const [isRegistering, setIsRegistering] = useState(false);
   const [editingBoatId, setEditingBoatId] = useState(null);
   const [selectedExchangeIndex, setSelectedExchangeIndex] = useState(0);
+  const [boatSplits, setBoatSplits] = useState([]);
   const [crewInput, setCrewInput] = useState('');
   const [isTracking, setIsTracking] = useState(false);
   const [trackingBoatId, setTrackingBoatId] = useState(() => localStorage.getItem('vtl_tracking_id'));
@@ -280,8 +281,13 @@ export default function App() {
     return () => { clearInterval(timer); clearInterval(fetchTimer); };
   }, []);
 
-  const selectedMapBoatIdRef = useRef(null);
-  useEffect(() => { selectedMapBoatIdRef.current = selectedMapBoatId; }, [selectedMapBoatId]);
+  useEffect(() => {
+    if (selectedMapBoatId) {
+      axios.get(`${API_URL}/api/boats/${selectedMapBoatId}/splits`).then(res => setBoatSplits(res.data)).catch(() => {});
+    } else {
+      setBoatSplits([]);
+    }
+  }, [selectedMapBoatId]);
 
   useEffect(() => {
     fetchBoats();
@@ -442,6 +448,42 @@ export default function App() {
     return `${mins}:${secs.toString().padStart(2, '0')}`;
   };
 
+  const BoatSplitsTable = ({ splits }) => {
+    if (!splits || splits.length === 0) return null;
+    return (
+      <div style={{ marginTop: '15px' }}>
+        <div style={sectionTitleStyle}><Activity size={16} /> Tempos por Trecho</div>
+        <div style={{ background: '#f8fafc', borderRadius: '12px', border: '1px solid #e2e8f0', overflow: 'hidden' }}>
+          <table style={{ width: '100%', fontSize: '11px', borderCollapse: 'collapse' }}>
+            <thead style={{ background: '#f1f5f9' }}>
+              <tr>
+                <th style={{ padding: '8px', textAlign: 'left' }}>Trecho</th>
+                <th style={{ padding: '8px', textAlign: 'left' }}>Tempo</th>
+                <th style={{ padding: '8px', textAlign: 'left' }}>Início</th>
+              </tr>
+            </thead>
+            <tbody>
+              {splits.map((s) => {
+                const start = new Date(s.start_time);
+                const end = s.end_time ? new Date(s.end_time) : new Date();
+                const durationMs = end - start;
+                const hours = Math.floor(durationMs / 3600000);
+                const mins = Math.floor((durationMs % 3600000) / 60000);
+                return (
+                  <tr key={s.id} style={{ borderTop: '1px solid #e2e8f0' }}>
+                    <td style={{ padding: '8px' }}>T{s.exchange_index + 1}</td>
+                    <td style={{ padding: '8px', fontWeight: 'bold' }}>{hours > 0 ? `${hours}h ` : ''}{mins}min</td>
+                    <td style={{ padding: '8px', color: '#64748b' }}>{start.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    );
+  };
+
   const BoatDetails = ({ boat, onClose }) => (
     <div style={{ flex: '0 0 45%', background: 'white', borderTop: '2px solid #e2e8f0', padding: '15px 20px', overflowY: 'auto' }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '10px' }}>
@@ -460,7 +502,10 @@ export default function App() {
         <div style={infoCardStyle}><Activity size={14} color="#2563eb" /><div><span style={infoLabel}>Km/h</span><br/><strong>{boat.speed || 0}</strong></div></div>
         <div style={infoCardStyle}><RefreshCw size={14} color="#f59e0b" /><div><span style={infoLabel}>Ritmo</span><br/><strong>{calculatePace(boat.speed)}</strong></div></div>
       </div>
-      <div style={{ marginBottom: '15px' }}>
+
+      <BoatSplitsTable splits={boatSplits} />
+
+      <div style={{ marginBottom: '15px', marginTop: '15px' }}>
         <div style={sectionTitleStyle}><Users size={16} /> Tripulação Atual</div>
         <div style={crewBoxStyle}>{boat.current_crew?.join(', ') || 'Ninguém'}</div>
       </div>
@@ -804,7 +849,10 @@ export default function App() {
                       <button onClick={async () => {
                         if (exchanges.length === 0) return alert('O capitão precisa configurar os trechos primeiro!');
                         const selectedCrew = exchanges[selectedExchangeIndex];
-                        await axios.post(`${API_URL}/api/boats/${trackingBoatId}/take_control`, { new_crew: selectedCrew });
+                        await axios.post(`${API_URL}/api/boats/${trackingBoatId}/take_control`, { 
+                          new_crew: selectedCrew,
+                          exchange_index: selectedExchangeIndex 
+                        });
                         activateHardwareGPS(trackingBoatId);
                       }} style={{ ...startBtnStyle, marginTop: '20px', background: '#10b981' }}>Assumir Trecho e Iniciar GPS</button>
                     </div>
