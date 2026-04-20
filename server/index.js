@@ -3,6 +3,7 @@ const http = require('http');
 const { Server } = require('socket.io');
 const cors = require('cors');
 const { Pool } = require('pg');
+const path = require('path');
 require('dotenv').config();
 
 const app = express();
@@ -21,11 +22,11 @@ const io = new Server(server, {
 const pool = new Pool({
   connectionString: process.env.DATABASE_URL,
   ssl: {
-    rejectUnauthorized: false // Necessário para o Render
+    rejectUnauthorized: false
   }
 });
 
-// Inicialização das tabelas no Banco de Dados
+// Inicialização das tabelas
 async function initDb() {
   try {
     await pool.query(`
@@ -39,26 +40,15 @@ async function initDb() {
         last_updated TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
         battery INTEGER
       );
-      
-      CREATE TABLE IF NOT EXISTS location_history (
-        id SERIAL PRIMARY KEY,
-        boat_id INTEGER REFERENCES boats(id),
-        lat DOUBLE PRECISION,
-        lng DOUBLE PRECISION,
-        timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-      );
     `);
-    console.log("Banco de Dados inicializado com sucesso.");
+    console.log("Banco de Dados ok.");
   } catch (err) {
-    console.error("Erro ao inicializar banco de dados:", err);
+    console.error("Erro DB:", err);
   }
 }
-
 initDb();
 
 // --- Rotas API ---
-
-// Listar todos os barcos
 app.get('/api/boats', async (req, res) => {
   try {
     const result = await pool.query('SELECT * FROM boats WHERE active = true ORDER BY name ASC');
@@ -68,13 +58,12 @@ app.get('/api/boats', async (req, res) => {
   }
 });
 
-// Criar um novo barco
 app.post('/api/boats', async (req, res) => {
   const { name, type } = req.body;
   try {
     const result = await pool.query(
       'INSERT INTO boats (name, type) VALUES ($1, $2) RETURNING *',
-      [name, type || 'OC6']
+      [name, type]
     );
     res.status(201).json(result.rows[0]);
   } catch (err) {
@@ -82,40 +71,29 @@ app.post('/api/boats', async (req, res) => {
   }
 });
 
-// --- Lógica Socket.io ---
+// --- SERVIR FRONTEND ESTÁTICO ---
+// Servir os arquivos da build do React
+app.use(express.static(path.join(__dirname, '../client/dist')));
 
+// Qualquer outra rota cai no index.html do React (SPA)
+app.get('*', (req, res) => {
+  res.sendFile(path.join(__dirname, '../client/dist/index.html'));
+});
+
+// --- Socket.io ---
 io.on('connection', (socket) => {
-  console.log('Nova conexão:', socket.id);
-
-  // Um barco está transmitindo sua localização
   socket.on('update_location', async (data) => {
     const { boatId, lat, lng, battery } = data;
-    
     if (!boatId || !lat || !lng) return;
-
     try {
-      // 1. Atualiza o status atual do barco
       await pool.query(
         'UPDATE boats SET lat = $1, lng = $2, battery = $3, last_updated = CURRENT_TIMESTAMP WHERE id = $4',
         [lat, lng, battery, boatId]
       );
-
-      // 2. Salva no histórico para o rastro (opcional, para exibir depois)
-      await pool.query(
-        'INSERT INTO location_history (boat_id, lat, lng) VALUES ($1, $2, $3)',
-        [boatId, lat, lng]
-      );
-
-      // 3. Notifica todos os mapas conectados sobre a nova posição
       io.emit('location_changed', { boatId, lat, lng, battery, lastUpdated: new Date() });
-      
     } catch (err) {
-      console.error('Erro ao atualizar localização:', err);
+      console.error('Erro Socket update:', err);
     }
-  });
-
-  socket.on('disconnect', () => {
-    console.log('Cliente desconectado:', socket.id);
   });
 });
 
