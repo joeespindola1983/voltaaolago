@@ -354,6 +354,14 @@ export default function App() {
     watchIdRef.current = watchId;
   };
 
+  const calculatePace = (speedKmh) => {
+    if (!speedKmh || speedKmh < 0.5) return '--:--';
+    const paceDecimal = 60 / speedKmh;
+    const mins = Math.floor(paceDecimal);
+    const secs = Math.round((paceDecimal - mins) * 60);
+    return `${mins}:${secs.toString().padStart(2, '0')}`;
+  };
+
   const BoatDetails = ({ boat, onClose }) => (
     <div style={{ flex: '0 0 45%', background: 'white', borderTop: '2px solid #e2e8f0', padding: '15px 20px', overflowY: 'auto' }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '10px' }}>
@@ -362,8 +370,8 @@ export default function App() {
       </div>
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '8px', marginBottom: '15px' }}>
         <div style={infoCardStyle}><Navigation size={14} color="#059669" /><div><span style={infoLabel}>KM</span><br/><strong>{boat.distance?.toFixed(2) || 0}</strong></div></div>
-        <div style={infoCardStyle}><Activity size={14} color="#2563eb" /><div><span style={infoLabel}>Sinal</span><br/><strong>{new Date(boat.last_updated).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}</strong></div></div>
-        <div style={infoCardStyle}><RefreshCw size={14} color="#f59e0b" /><div><span style={infoLabel}>Km/h</span><br/><strong>{boat.speed || 0}</strong></div></div>
+        <div style={infoCardStyle}><Activity size={14} color="#2563eb" /><div><span style={infoLabel}>Km/h</span><br/><strong>{boat.speed || 0}</strong></div></div>
+        <div style={infoCardStyle}><RefreshCw size={14} color="#f59e0b" /><div><span style={infoLabel}>Ritmo</span><br/><strong>{calculatePace(boat.speed)}</strong></div></div>
       </div>
       <div style={{ marginBottom: '15px' }}>
         <div style={sectionTitleStyle}><Users size={16} /> Tripulação Atual</div>
@@ -656,14 +664,18 @@ export default function App() {
                     <button onClick={() => stopTracking()} style={{ background: '#ef4444', color: 'white', border: 'none', padding: '8px 15px', borderRadius: '10px', fontWeight: 'bold' }}>PARAR</button>
                   </div>
                   
-                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px', marginBottom: '12px' }}>
-                    <div style={{ ...infoCardStyle, background: 'rgba(255,255,255,0.5)' }}>
-                      <Navigation size={18} color="#059669" />
-                      <div><span style={infoLabel}>Distância</span><br/><strong style={{ fontSize: '16px' }}>{boats.find(b => Number(b.id) === Number(trackingBoatId))?.distance?.toFixed(2) || '0.00'} km</strong></div>
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '8px', marginBottom: '12px' }}>
+                    <div style={{ ...infoCardStyle, background: 'rgba(255,255,255,0.5)', padding: '8px 5px', flexDirection: 'column', textAlign: 'center' }}>
+                      <Navigation size={16} color="#059669" />
+                      <div><span style={infoLabel}>Km</span><br/><strong style={{ fontSize: '14px' }}>{boats.find(b => Number(b.id) === Number(trackingBoatId))?.distance?.toFixed(2) || '0.00'}</strong></div>
                     </div>
-                    <div style={{ ...infoCardStyle, background: 'rgba(255,255,255,0.5)' }}>
-                      <Activity size={18} color="#2563eb" />
-                      <div><span style={infoLabel}>Velocidade</span><br/><strong style={{ fontSize: '16px' }}>{boats.find(b => Number(b.id) === Number(trackingBoatId))?.speed || '0.0'} km/h</strong></div>
+                    <div style={{ ...infoCardStyle, background: 'rgba(255,255,255,0.5)', padding: '8px 5px', flexDirection: 'column', textAlign: 'center' }}>
+                      <Activity size={16} color="#2563eb" />
+                      <div><span style={infoLabel}>Km/h</span><br/><strong style={{ fontSize: '14px' }}>{boats.find(b => Number(b.id) === Number(trackingBoatId))?.speed || '0.0'}</strong></div>
+                    </div>
+                    <div style={{ ...infoCardStyle, background: 'rgba(255,255,255,0.5)', padding: '8px 5px', flexDirection: 'column', textAlign: 'center' }}>
+                      <RefreshCw size={16} color="#f59e0b" />
+                      <div><span style={infoLabel}>Pace</span><br/><strong style={{ fontSize: '14px' }}>{calculatePace(boats.find(b => Number(b.id) === Number(trackingBoatId))?.speed)}</strong></div>
                     </div>
                   </div>
 
