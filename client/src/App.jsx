@@ -1268,30 +1268,16 @@ export default function App() {
               <label style={labelStyle}>Controle da Prova</label>
               <div style={{ display: 'flex', gap: '10px', marginBottom: '10px' }}>
                 {!raceStartTime ? (
-                  <button 
-                    onClick={() => { if (window.confirm('Iniciar o cronômetro da prova para TODOS?')) axios.post(`${API_URL}/api/config`, { raceStartTime: Date.now() }); }} 
-                    style={{ ...startBtnStyle, background: '#10b981', flex: 1 }}
-                  >
+                  <button onClick={() => { if (window.confirm('Iniciar a prova para TODOS?')) axios.post(`${API_URL}/api/config`, { raceStartTime: Date.now() }); }} style={{ ...startBtnStyle, background: '#10b981', flex: 1 }}>
                     Iniciar Prova
                   </button>
                 ) : (
-                  <button 
-                    onClick={() => { if (window.confirm('Resetar o cronômetro da prova?')) axios.post(`${API_URL}/api/config`, { raceStartTime: null }); }} 
-                    style={{ ...startBtnStyle, background: '#ef4444', flex: 1 }}
-                  >
+                  <button onClick={() => { if (window.confirm('Resetar o cronômetro?')) axios.post(`${API_URL}/api/config`, { raceStartTime: null }); }} style={{ ...startBtnStyle, background: '#ef4444', flex: 1 }}>
                     Resetar Cronômetro
                   </button>
                 )}
               </div>
-              <button 
-                onClick={async () => { 
-                  if (window.confirm('CUIDADO! Isso vai ZERAR TODOS os barcos, apagar todos os rastros e tempos de trecho. Tem certeza absoluta?')) {
-                    await axios.post(`${API_URL}/api/admin/reset_all`);
-                    fetchBoats();
-                  }
-                }} 
-                style={{ ...startBtnStyle, background: '#000' }}
-              >
+              <button onClick={async () => { if (window.confirm('ZERAR TODOS os barcos e logs?')) { await axios.post(`${API_URL}/api/admin/reset_all`); fetchBoats(); } }} style={{ ...startBtnStyle, background: '#000' }}>
                 Limpeza Total (Reset Geral)
               </button>
             </div>
@@ -1306,81 +1292,50 @@ export default function App() {
             <div style={{ background: 'white', padding: '15px', borderRadius: '12px', marginBottom: '20px', border: '1px solid #e2e8f0' }}>
               <label style={labelStyle}>Enviar Comunicado Global</label>
               <div style={{ display: 'flex', gap: '8px' }}>
-                <input 
-                  placeholder="Digite o aviso para todos..." 
-                  value={broadcastInput} 
-                  onChange={e => setBroadcastInput(e.target.value)} 
-                  style={{ ...inputStyle, marginBottom: 0 }} 
-                />
-                <button 
-                  onClick={() => { axios.post(`${API_URL}/api/config`, { broadcast: broadcastInput }); setBroadcastInput(''); }} 
-                  style={{ background: '#1e3a8a', color: 'white', border: 'none', borderRadius: '10px', padding: '0 20px', fontWeight: 'bold' }}
-                >
-                  Enviar
-                </button>
+                <input placeholder="Digite o aviso para todos..." value={broadcastInput} onChange={e => setBroadcastInput(e.target.value)} style={{ ...inputStyle, marginBottom: 0 }} />
+                <button onClick={() => { axios.post(`${API_URL}/api/config`, { broadcast: broadcastInput }); setBroadcastInput(''); }} style={{ background: '#1e3a8a', color: 'white', border: 'none', borderRadius: '10px', padding: '0 20px', fontWeight: 'bold' }}>Enviar</button>
               </div>
               {broadcast.message && (
-                <button 
-                  onClick={() => { axios.post(`${API_URL}/api/config`, { broadcast: '' }); }} 
-                  style={{ background: 'none', border: 'none', color: '#ef4444', fontSize: '11px', marginTop: '8px', fontWeight: 'bold' }}
-                >
-                  Remover comunicado atual
-                </button>
+                <button onClick={() => { axios.post(`${API_URL}/api/config`, { broadcast: '' }); }} style={{ background: 'none', border: 'none', color: '#ef4444', fontSize: '11px', marginTop: '8px', fontWeight: 'bold' }}>Remover comunicado</button>
               )}
             </div>
 
             <div style={{ background: 'white', padding: '15px', borderRadius: '12px', marginBottom: '20px', border: '1px solid #e2e8f0' }}>
               <label style={labelStyle}>Relatórios</label>
-              <button 
-                onClick={() => { window.open(`${API_URL}/api/admin/export`, '_blank'); }} 
-                style={{ ...startBtnStyle, background: '#1e3a8a', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '10px' }}
-              >
-                <Download size={20} /> Exportar Resultados (CSV)
-              </button>
+              <button onClick={() => { window.open(`${API_URL}/api/admin/export`, '_blank'); }} style={{ ...startBtnStyle, background: '#1e3a8a', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '10px' }}><Download size={20} /> Exportar Resultados (CSV)</button>
             </div>
 
             <h3 style={{ fontSize: '16px', marginBottom: '10px' }}>Monitoramento de Telemetria ({boats.length})</h3>
             <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
               {boats.map(b => {
                 const diff = (currentTime - new Date(b.last_updated).getTime()) / 60000;
-                const status = diff < 5 ? 'online' : (diff < 15 ? 'warning' : 'lost');
-                const statusLabel = status === 'online' ? 'Ativo' : (status === 'warning' ? 'Sinal Instável' : 'SINAL PERDIDO');
-                const statusColor = status === 'online' ? '#10b981' : (status === 'warning' ? '#f59e0b' : '#ef4444');
-
+                const statusColor = diff < 5 ? '#10b981' : (diff < 15 ? '#f59e0b' : '#ef4444');
                 return (
                   <div key={b.id} style={{ background: 'white', padding: '15px', borderRadius: '15px', border: `2px solid ${statusColor}`, boxShadow: '0 2px 8px rgba(0,0,0,0.05)' }}>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '10px' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '10px' }}>
                       <div>
                         <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                           <div style={{ width: '12px', height: '12px', borderRadius: '50%', background: b.color }} />
                           <strong style={{ fontSize: '16px' }}>{b.name}</strong>
                         </div>
-                        <div style={{ fontSize: '12px', color: '#64748b' }}>@{b.nickname} • {b.category}</div>
+                        <div style={{ fontSize: '12px', color: '#64748b' }}>@{b.nickname}</div>
                       </div>
-                      <div style={{ textAlign: 'right' }}>
-                        <div style={{ fontSize: '10px', fontWeight: 'bold', color: statusColor, textTransform: 'uppercase' }}>{statusLabel}</div>
-                        <div style={{ fontSize: '11px', color: '#94a3b8' }}>há {Math.floor(diff)} min</div>
-                      </div>
+                      <div style={{ textAlign: 'right', fontSize: '10px', color: statusColor, fontWeight: 'bold' }}>há {Math.floor(diff)} min</div>
                     </div>
-
                     <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '8px', borderTop: '1px solid #f1f5f9', paddingTop: '10px' }}>
                       <div style={{ textAlign: 'center' }}>
-                        <div style={{ fontSize: '9px', color: '#94a3b8', textTransform: 'uppercase' }}>Bateria</div>
-                        <div style={{ fontSize: '13px', fontWeight: 'bold', color: (b.battery_level || 0) < 20 ? '#ef4444' : '#1e293b' }}>
-                          <Battery size={12} style={{ verticalAlign: 'middle', marginRight: '2px' }} /> {b.battery_level || '--'}%
-                        </div>
+                        <div style={{ fontSize: '9px', color: '#94a3b8' }}>BATERIA</div>
+                        <div style={{ fontSize: '13px', fontWeight: 'bold' }}><Battery size={12} /> {b.battery_level || '--'}%</div>
                       </div>
                       <div style={{ textAlign: 'center' }}>
-                        <div style={{ fontSize: '9px', color: '#94a3b8', textTransform: 'uppercase' }}>Precisão</div>
-                        <div style={{ fontSize: '13px', fontWeight: 'bold', color: (b.heading === null) ? '#ef4444' : '#1e293b' }}>
-                          {b.distance?.toFixed(1)}km
-                        </div>
+                        <div style={{ fontSize: '9px', color: '#94a3b8' }}>DISTÂNCIA</div>
+                        <div style={{ fontSize: '13px', fontWeight: 'bold' }}>{b.distance?.toFixed(1)}km</div>
                       </div>
                       <div style={{ textAlign: 'center' }}>
-                        <div style={{ fontSize: '9px', color: '#94a3b8', textTransform: 'uppercase' }}>Ações</div>
+                        <div style={{ fontSize: '9px', color: '#94a3b8' }}>AÇÕES</div>
                         <div style={{ display: 'flex', justifyContent: 'center', gap: '10px' }}>
-                          <RefreshCw size={16} color="#f59e0b" onClick={() => { if (window.confirm('Resetar barco?')) axios.post(`${API_URL}/api/boats/${b.id}/reset`).then(() => fetchBoats()); }} style={{ cursor: 'pointer' }} />
-                          <Trash2 size={16} color="#ef4444" onClick={() => { if (window.confirm('Remover barco?')) axios.delete(`${API_URL}/api/boats/${b.id}`).then(() => fetchBoats()); }} style={{ cursor: 'pointer' }} />
+                          <RefreshCw size={16} color="#f59e0b" onClick={() => { if (window.confirm('Resetar?')) axios.post(`${API_URL}/api/boats/${b.id}/reset`).then(() => fetchBoats()); }} />
+                          <Trash2 size={16} color="#ef4444" onClick={() => { if (window.confirm('Remover?')) axios.delete(`${API_URL}/api/boats/${b.id}`).then(() => fetchBoats()); }} />
                         </div>
                       </div>
                     </div>
