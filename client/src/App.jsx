@@ -186,7 +186,7 @@ export default function App() {
   const [category, setCategory] = useState('');
   const [boatType, setBoatType] = useState('');
   const [boatColor, setBoatColor] = useState('#2563eb');
-  const [boatCategory, setBoatColorCategory] = useState('Geral');
+  const [boatCategory, setBoatCategory] = useState('Geral');
   const [nickname, setNickname] = useState('');
   const [pin, setPin] = useState('');
   const [athletes, setAthletes] = useState([]);
@@ -253,6 +253,13 @@ export default function App() {
   const watchIdRef = useRef(null);
   const lastSentRef = useRef(0);
   const [currentTime, setCurrentTime] = useState(Date.now());
+  const [isLandscape, setIsLandscape] = useState(window.innerWidth > window.innerHeight || window.innerWidth > 768);
+
+  useEffect(() => {
+    const handleResize = () => setIsLandscape(window.innerWidth > window.innerHeight || window.innerWidth > 768);
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
+  }, []);
 
   // Efeito para o Cronômetro de Sincronização
   useEffect(() => {
@@ -654,7 +661,7 @@ export default function App() {
                           <button onClick={() => {
                             const p = prompt('Digite a SENHA de 4 números:');
                             if (p === b.pin) {
-                              setEditingBoatId(b.id); setBoatName(b.name); setNickname(b.nickname); setPin(b.pin); setAthletes(b.athletes || []); setExchanges(b.exchanges || []); setBoatType(b.type); setBoatColor(b.color || '#2563eb'); setBoatColorCategory(b.category || 'Geral'); setIsRegistering(true);
+                              setEditingBoatId(b.id); setBoatName(b.name); setNickname(b.nickname); setPin(b.pin); setAthletes(b.athletes || []); setExchanges(b.exchanges || []); setBoatType(b.type); setBoatColor(b.color || '#2563eb'); setBoatCategory(b.category || 'Geral'); setIsRegistering(true);
                             } else if (p !== null) alert('SENHA incorreta!');
                           }} style={{ background: '#f1f5f9', border: 'none', padding: '10px 15px', borderRadius: '10px', fontSize: '12px', fontWeight: 'bold' }}>Gerenciar</button>                        </div>
                       </div>
@@ -678,7 +685,7 @@ export default function App() {
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr', gap: '10px' }}>
                   <div>
                     <label style={labelStyle}>CATEGORIA (ex: Mista, Open, Master)</label>
-                    <select style={inputStyle} onChange={(e) => setBoatColorCategory(e.target.value)} value={boatCategory}>
+                    <select style={inputStyle} onChange={(e) => setBoatCategory(e.target.value)} value={boatCategory}>
                       <option value="Geral">Geral</option>
                       <option value="OC6 Mista">OC6 Mista</option>
                       <option value="OC6 Open">OC6 Open</option>
@@ -776,8 +783,8 @@ export default function App() {
         )}
 
         {view === 'map' && (
-          <>
-            <div style={{ flex: selectedMapBoatId ? '0 0 55%' : '1 1 100%', transition: 'all 0.3s ease' }}>
+          <div style={{ display: 'flex', flex: 1, flexDirection: isLandscape ? 'row' : 'column', overflow: 'hidden' }}>
+            <div style={{ flex: selectedMapBoatId ? (isLandscape ? '1 1 70%' : '0 0 55%') : '1 1 100%', transition: 'all 0.3s ease', position: 'relative' }}>
               <MapContainer center={[-15.7942, -47.8822]} zoom={13} style={{ height: '100%', width: '100%' }}>
                 <TileLayer url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png" />
                 <RaceClock startTime={raceStartTime} />
@@ -787,9 +794,19 @@ export default function App() {
               </MapContainer>
             </div>
             {selectedMapBoatId && boats.find(b => Number(b.id) === Number(selectedMapBoatId)) && (
-              <BoatDetails boat={boats.find(b => Number(b.id) === Number(selectedMapBoatId))} onClose={() => setSelectedMapBoatId(null)} />
+              <div style={{ 
+                flex: isLandscape ? '0 0 350px' : '0 0 45%', 
+                background: 'white', 
+                borderLeft: isLandscape ? '2px solid #e2e8f0' : 'none', 
+                borderTop: isLandscape ? 'none' : '2px solid #e2e8f0',
+                height: '100%',
+                overflow: 'hidden',
+                display: 'flex'
+              }}>
+                <BoatDetails boat={boats.find(b => Number(b.id) === Number(selectedMapBoatId))} onClose={() => setSelectedMapBoatId(null)} />
+              </div>
             )}
-          </>
+          </div>
         )}
 
         {view === 'track' && (
@@ -909,38 +926,51 @@ export default function App() {
                       <Users size={14}/> EQUIPE NO TRECHO {selectedExchangeIndex + 1}:
                     </div>
                     <div style={{ fontSize: '13px', color: '#047857' }}>
-                      {exchanges[selectedExchangeIndex]?.join(', ') || 'Nenhum atleta escalado'}
+                      {exchanges[selectedExchangeIndex]?.join(', ') || 'Nuehum atleta escalado'}
                     </div>
                   </div>
                 </div>
-                <div style={{ flex: selectedMapBoatId ? '0 0 55%' : '1 1 100%', position: 'relative', transition: 'all 0.3s ease' }}>
-                  <MapContainer center={[-15.7942, -47.8822]} zoom={13} style={{ height: '100%', width: '100%' }}>
-                    <TileLayer url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png" />
-                    <MapEventHandler onMapClick={() => setSelectedMapBoatId(null)} />
-                    <MapAutoZoom boats={boats} selectedMapBoatId={selectedMapBoatId} focusBoatId={trackingBoatId} />
-                    <BoatLayer boats={boats} trackingBoatId={trackingBoatId} setSelectedMapBoatId={setSelectedMapBoatId} setClusterModalBoats={setClusterModalBoats} currentTime={currentTime} />
-                  </MapContainer>
+                
+                <div style={{ display: 'flex', flex: 1, flexDirection: isLandscape ? 'row' : 'column', overflow: 'hidden' }}>
+                  <div style={{ flex: selectedMapBoatId ? (isLandscape ? '1 1 70%' : '0 0 55%') : '1 1 100%', position: 'relative', transition: 'all 0.3s ease' }}>
+                    <MapContainer center={[-15.7942, -47.8822]} zoom={13} style={{ height: '100%', width: '100%' }}>
+                      <TileLayer url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png" />
+                      <MapEventHandler onMapClick={() => setSelectedMapBoatId(null)} />
+                      <MapAutoZoom boats={boats} selectedMapBoatId={selectedMapBoatId} focusBoatId={trackingBoatId} />
+                      <BoatLayer boats={boats} trackingBoatId={trackingBoatId} setSelectedMapBoatId={setSelectedMapBoatId} setClusterModalBoats={setClusterModalBoats} currentTime={currentTime} />
+                    </MapContainer>
 
-                  {/* Indicador de Sincronização Inteligente com Countdown */}
-                  <div style={{ position: 'absolute', bottom: '20px', left: '50%', transform: 'translateX(-50%)', zIndex: 1000, background: 'rgba(255,255,255,0.95)', padding: '12px 24px', borderRadius: '30px', boxShadow: '0 4px 15px rgba(0,0,0,0.15)', display: 'flex', alignItems: 'center', gap: '10px', border: '1px solid #e2e8f0', whiteSpace: 'nowrap' }}>
-                    <div style={{ 
-                      width: '12px', height: '12px', borderRadius: '50%', 
-                      background: syncStatus === 'error' ? '#ef4444' : (syncStatus === 'sending' ? '#2563eb' : (syncStatus === 'ok' ? '#10b981' : '#f59e0b')),
-                      animation: (syncStatus === 'sending' || syncStatus === 'idle') ? 'pulse 1s infinite' : 'none'
-                    }} />
-                    <span style={{ fontSize: '14px', fontWeight: 'bold', color: '#1e293b' }}>
-                      {!isSocketConnected ? '⚠️ Offline - Salvando no celular' :
-                       syncStatus === 'sending' ? '📡 Sincronizando agora...' : 
-                       syncStatus === 'error' ? '⚠️ Erro de GPS' :
-                       syncStatus === 'ok' ? '✅ Sincronizado agora!' :
-                       nextSyncCountdown > 0 ? `Próxima sincronização em ${nextSyncCountdown}s` :
-                       'Aguardando sinal GPS...'}
-                    </span>
+                    {/* Indicador de Sincronização Inteligente com Countdown */}
+                    <div style={{ position: 'absolute', bottom: '20px', left: '50%', transform: 'translateX(-50%)', zIndex: 1000, background: 'rgba(255,255,255,0.95)', padding: '12px 24px', borderRadius: '30px', boxShadow: '0 4px 15px rgba(0,0,0,0.15)', display: 'flex', alignItems: 'center', gap: '10px', border: '1px solid #e2e8f0', whiteSpace: 'nowrap' }}>
+                      <div style={{ 
+                        width: '12px', height: '12px', borderRadius: '50%', 
+                        background: syncStatus === 'error' ? '#ef4444' : (syncStatus === 'sending' ? '#2563eb' : (syncStatus === 'ok' ? '#10b981' : '#f59e0b')),
+                        animation: (syncStatus === 'sending' || syncStatus === 'idle') ? 'pulse 1s infinite' : 'none'
+                      }} />
+                      <span style={{ fontSize: '14px', fontWeight: 'bold', color: '#1e293b' }}>
+                        {!isSocketConnected ? '⚠️ Offline - Salvando no celular' :
+                        syncStatus === 'sending' ? '📡 Sincronizando agora...' : 
+                        syncStatus === 'error' ? '⚠️ Erro de GPS' :
+                        syncStatus === 'ok' ? '✅ Sincronizado agora!' :
+                        nextSyncCountdown > 0 ? `Próxima sincronização em ${nextSyncCountdown}s` :
+                        'Aguardando sinal GPS...'}
+                      </span>
+                    </div>
                   </div>
+                  {selectedMapBoatId && boats.find(b => Number(b.id) === Number(selectedMapBoatId)) && (
+                    <div style={{ 
+                      flex: isLandscape ? '0 0 350px' : '0 0 45%', 
+                      background: 'white', 
+                      borderLeft: isLandscape ? '2px solid #e2e8f0' : 'none', 
+                      borderTop: isLandscape ? 'none' : '2px solid #e2e8f0',
+                      height: '100%',
+                      overflow: 'hidden',
+                      display: 'flex'
+                    }}>
+                      <BoatDetails boat={boats.find(b => Number(b.id) === Number(selectedMapBoatId))} onClose={() => setSelectedMapBoatId(null)} />
+                    </div>
+                  )}
                 </div>
-                {selectedMapBoatId && boats.find(b => Number(b.id) === Number(selectedMapBoatId)) && (
-                  <BoatDetails boat={boats.find(b => Number(b.id) === Number(selectedMapBoatId))} onClose={() => setSelectedMapBoatId(null)} />
-                )}
               </>
             )}
           </div>
