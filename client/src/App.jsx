@@ -590,6 +590,15 @@ export default function App() {
     return `${mins}:${secs.toString().padStart(2, '0')}`;
   };
 
+  const getDistance = (lat1, lon1, lat2, lng2) => {
+    const R = 6371;
+    const dLat = (lat2 - lat1) * Math.PI / 180;
+    const dLon = (lng2 - lon1) * Math.PI / 180;
+    const a = Math.sin(dLat/2) * Math.sin(dLat/2) + Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) * Math.sin(dLon/2) * Math.sin(dLon/2);
+    const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+    return R * c;
+  };
+
   const BoatSplitsTable = ({ splits }) => {
     if (!splits || splits.length === 0) return null;
     return (
@@ -626,6 +635,33 @@ export default function App() {
     );
   };
 
+  const WaypointETA = ({ boat, waypoints }) => {
+    if (!boat.lat || !waypoints || waypoints.length === 0) return null;
+    
+    return (
+      <div style={{ marginTop: '15px' }}>
+        <div style={sectionTitleStyle}><MapIcon size={16} /> Próximos Pontos (Estimativa)</div>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '5px' }}>
+          {waypoints.map(wp => {
+            const dist = getDistance(boat.lat, boat.lng, wp.lat, wp.lng);
+            let eta = '--';
+            if (boat.speed > 1) {
+              const totalMins = (dist / boat.speed) * 60;
+              const arrival = new Date(Date.now() + totalMins * 60000);
+              eta = arrival.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+            }
+            return (
+              <div key={wp.id} style={{ display: 'flex', justifyContent: 'space-between', background: '#f8fafc', padding: '8px 12px', borderRadius: '8px', fontSize: '11px', border: '1px solid #e2e8f0' }}>
+                <span><strong>{wp.name}</strong> • {dist.toFixed(2)} km</span>
+                <span style={{ color: '#1e3a8a', fontWeight: 'bold' }}>Chegada: {eta}</span>
+              </div>
+            );
+          })}
+        </div>
+      </div>
+    );
+  };
+
   const BoatDetails = ({ boat, onClose }) => (
     <div style={{ flex: '0 0 45%', background: 'white', borderTop: '2px solid #e2e8f0', padding: '15px 20px', overflowY: 'auto' }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '10px' }}>
@@ -646,6 +682,8 @@ export default function App() {
       </div>
 
       <BoatSplitsTable splits={boatSplits} />
+      
+      <WaypointETA boat={boat} waypoints={waypoints} />
 
       <div style={{ marginBottom: '15px', marginTop: '15px' }}>
         <div style={sectionTitleStyle}><Users size={16} /> Tripulação Atual</div>
