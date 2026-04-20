@@ -315,9 +315,21 @@ export default function App() {
         <div style={infoCardStyle}><Activity size={14} color="#2563eb" /><div><span style={infoLabel}>Sinal</span><br/><strong>{new Date(boat.last_updated).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}</strong></div></div>
       </div>
       <div style={{ marginBottom: '15px' }}>
-        <div style={sectionTitleStyle}><Users size={16} /> Tripulação</div>
+        <div style={sectionTitleStyle}><Users size={16} /> Tripulação Atual</div>
         <div style={crewBoxStyle}>{boat.current_crew?.join(', ') || 'Ninguém'}</div>
       </div>
+      {boat.exchanges?.length > 0 && (
+        <div style={{ marginBottom: '15px' }}>
+          <div style={sectionTitleStyle}><RefreshCw size={16} /> Próximos Trechos</div>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '5px' }}>
+            {boat.exchanges.map((ex, i) => (
+              <div key={i} style={{ background: '#f8fafc', padding: '8px 12px', borderRadius: '8px', fontSize: '11px', border: '1px solid #e2e8f0' }}>
+                <strong>Trecho {i + 1}:</strong> {ex.join(', ')}
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
       <button onClick={() => { 
         setView('track'); 
         setNickname(boat.nickname || ''); 
@@ -375,10 +387,10 @@ export default function App() {
                         </div>
                       </div>
                       <button onClick={() => {
-                        const p = prompt('PIN de 2 dígitos:');
+                        const p = prompt('Digite a SENHA de 4 números:');
                         if (p === b.pin) {
                           setEditingBoatId(b.id); setBoatName(b.name); setNickname(b.nickname); setPin(b.pin); setAthletes(b.athletes || []); setExchanges(b.exchanges || []); setBoatType(b.type); setBoatColor(b.color || '#2563eb'); setIsRegistering(true);
-                        } else if (p !== null) alert('PIN incorreto!');
+                        } else if (p !== null) alert('SENHA incorreta!');
                       }} style={{ background: '#f1f5f9', border: 'none', padding: '10px 15px', borderRadius: '10px', fontSize: '12px', fontWeight: 'bold' }}>Gerenciar</button>
                     </div>
                   ))}
@@ -397,13 +409,22 @@ export default function App() {
                 <label style={labelStyle}>Nome do Barco</label>
                 <input placeholder="Ex: Vento Leste" value={boatName} onChange={e => setBoatName(e.target.value)} style={inputStyle} />
                 
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr', gap: '10px' }}>
                   <div>
-                    <label style={labelStyle}>PIN (2 dígitos)</label>
-                    <input type="password" maxLength={2} placeholder="00" value={pin} onChange={e => setPin(e.target.value.replace(/[^0-9]/g, ''))} style={inputStyle} />
+                    <label style={labelStyle}>SENHA (4 números visíveis)</label>
+                    <input 
+                      type="text" 
+                      inputMode="numeric" 
+                      pattern="[0-9]*" 
+                      maxLength={4} 
+                      placeholder="Ex: 1234" 
+                      value={pin} 
+                      onChange={e => setPin(e.target.value.replace(/[^0-9]/g, ''))} 
+                      style={inputStyle} 
+                    />
                   </div>
                   <div>
-                    <label style={labelStyle}>Tipo</label>
+                    <label style={labelStyle}>Tipo de Barco</label>
                     <select style={inputStyle} onChange={(e) => setBoatType(e.target.value)} value={boatType}>
                       <option value="">Selecione...</option>
                       {Object.values(BOAT_CATEGORIES).flat().map(t => <option key={t} value={t}>{t}</option>)}
@@ -460,7 +481,7 @@ export default function App() {
                 </div>
 
                 <button onClick={async () => {
-                  if (!nickname || !boatName || pin.length < 2) return alert('Nickname, Nome e PIN (2 dígitos) são obrigatórios!');
+                  if (!nickname || !boatName || pin.length < 4) return alert('Nickname, Nome e SENHA (4 números) são obrigatórios!');
                   try {
                     const payload = { name: boatName, type: boatType, nickname, pin, color: boatColor, athletes, exchanges };
                     if (editingBoatId) {
@@ -510,10 +531,20 @@ export default function App() {
                       <label style={labelStyle}>Nickname (@id único)</label>
                       <input placeholder="ex: oc6lago" value={nickname} onChange={e => setNickname(e.target.value)} style={inputStyle} />
                       
-                      <label style={labelStyle}>PIN de 2 dígitos</label>
-                      <input type="password" maxLength={2} placeholder="00" value={pin} onChange={e => setPin(e.target.value)} style={inputStyle} />
+                      <label style={labelStyle}>SENHA de 4 números</label>
+                      <input 
+                        type="text" 
+                        inputMode="numeric" 
+                        pattern="[0-9]*" 
+                        maxLength={4} 
+                        placeholder="Ex: 1234" 
+                        value={pin} 
+                        onChange={e => setPin(e.target.value.replace(/[^0-9]/g, ''))} 
+                        style={inputStyle} 
+                      />
                       
                       <button onClick={async () => {
+                        if (pin.length < 4) return alert('A SENHA deve ter 4 números!');
                         try {
                           const res = await axios.post(`${API_URL}/api/boats/auth`, { nickname, pin });
                           setBoatName(res.data.name); setBoatType(res.data.type); setAthletes(res.data.athletes || []); setExchanges(res.data.exchanges || []);
