@@ -6,10 +6,12 @@ import axios from 'axios';
 import { Anchor, Map as MapIcon, Settings, Play, Battery, RefreshCw, Ship } from 'lucide-react';
 
 // --- CONFIGURAÇÕES ---
-// Agora ele detecta automaticamente o host para Socket e API
+// URL fixa do seu Backend no Render
+const BACKEND_URL = 'https://voltaaolago-backend.onrender.com';
+
 const API_URL = window.location.hostname === 'localhost' 
   ? 'http://localhost:3001' 
-  : window.location.origin;
+  : BACKEND_URL;
 
 const socket = io(API_URL);
 
