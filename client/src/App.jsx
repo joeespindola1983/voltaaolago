@@ -105,12 +105,30 @@ export default function App() {
   const [isTracking, setIsTracking] = useState(false);
   const [trackingBoatId, setTrackingBoatId] = useState(null);
   const [lastSuccessfulUpdate, setLastSuccessfulUpdate] = useState(null);
-  const [syncStatus, setSyncStatus] = useState('idle'); // 'idle', 'sending', 'ok', 'error'
+  const [syncStatus, setSyncStatus] = useState('idle');
+  const [nextSyncCountdown, setNextSyncCountdown] = useState(0);
   const isTrackingRef = useRef(false);
   const trackingBoatIdRef = useRef(null);
   const watchIdRef = useRef(null);
   const lastSentRef = useRef(0);
   const [currentTime, setCurrentTime] = useState(Date.now());
+
+  // Efeito para o Cronômetro de Sincronização
+  useEffect(() => {
+    if (!isTracking) {
+      setNextSyncCountdown(0);
+      return;
+    }
+
+    const interval = setInterval(() => {
+      const now = Date.now();
+      const nextSync = lastSentRef.current + (relayTimeoutRef.current * 60000);
+      const remaining = Math.max(0, Math.ceil((nextSync - now) / 1000));
+      setNextSyncCountdown(remaining);
+    }, 1000);
+
+    return () => clearInterval(interval);
+  }, [isTracking]);
   const [relayTimeout, setRelayTimeout] = useState(1);
   const relayTimeoutRef = useRef(1);
   const wakeLockRef = useRef(null);
@@ -137,6 +155,9 @@ export default function App() {
       if (isTrackingRef.current && Number(trackingBoatIdRef.current) === Number(data.boatId)) {
         setLastSuccessfulUpdate(Date.now());
         setSyncStatus('ok');
+        setTimeout(() => {
+          if (isTrackingRef.current) setSyncStatus('idle');
+        }, 3000);
       }
       setBoats(prev => {
         if (!prev.find(b => Number(b.id) === Number(data.boatId))) { fetchBoats(); return prev; }
@@ -333,19 +354,19 @@ export default function App() {
                     <BoatLayer boats={boats} trackingBoatId={trackingBoatId} setSelectedMapBoatId={setSelectedMapBoatId} setClusterModalBoats={setClusterModalBoats} currentTime={currentTime} />
                   </MapContainer>
 
-                  {/* Indicador de Sincronização Flutuante Melhorado */}
-                  <div style={{ position: 'absolute', bottom: '20px', left: '50%', transform: 'translateX(-50%)', zIndex: 1000, background: 'rgba(255,255,255,0.95)', padding: '10px 20px', borderRadius: '30px', boxShadow: '0 4px 15px rgba(0,0,0,0.15)', display: 'flex', alignItems: 'center', gap: '10px', border: '1px solid #e2e8f0', whiteSpace: 'nowrap' }}>
+                  {/* Indicador de Sincronização Inteligente com Countdown */}
+                  <div style={{ position: 'absolute', bottom: '20px', left: '50%', transform: 'translateX(-50%)', zIndex: 1000, background: 'rgba(255,255,255,0.95)', padding: '12px 24px', borderRadius: '30px', boxShadow: '0 4px 15px rgba(0,0,0,0.15)', display: 'flex', alignItems: 'center', gap: '10px', border: '1px solid #e2e8f0', whiteSpace: 'nowrap' }}>
                     <div style={{ 
                       width: '12px', height: '12px', borderRadius: '50%', 
-                      background: syncStatus === 'error' ? '#ef4444' : (syncStatus === 'sending' ? '#2563eb' : (lastSuccessfulUpdate ? '#10b981' : '#f59e0b')),
-                      animation: (syncStatus === 'sending' || !lastSuccessfulUpdate) ? 'pulse 1s infinite' : 'none'
+                      background: syncStatus === 'error' ? '#ef4444' : (syncStatus === 'sending' ? '#2563eb' : (syncStatus === 'ok' ? '#10b981' : '#f59e0b')),
+                      animation: (syncStatus === 'sending' || syncStatus === 'idle') ? 'pulse 1s infinite' : 'none'
                     }} />
                     <span style={{ fontSize: '14px', fontWeight: 'bold', color: '#1e293b' }}>
-                      {syncStatus === 'sending' ? '📡 Enviando coordenadas...' : 
+                      {syncStatus === 'sending' ? '📡 Sincronizando agora...' : 
                        syncStatus === 'error' ? '⚠️ Erro de GPS' :
-                       lastSuccessfulUpdate 
-                        ? `Sincronizado: ${Math.floor((currentTime - lastSuccessfulUpdate) / 60000)} min atrás` 
-                        : 'Aguardando sinal GPS...'}
+                       syncStatus === 'ok' ? '✅ Sincronizado agora!' :
+                       nextSyncCountdown > 0 ? `Próxima sincronização em ${nextSyncCountdown}s` :
+                       'Aguardando sinal GPS...'}
                     </span>
                   </div>
                 </div>
