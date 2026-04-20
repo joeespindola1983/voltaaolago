@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { io } from 'socket.io-client';
-import { MapContainer, TileLayer, Marker, Popup, useMap } from 'react-leaflet';
+import { MapContainer, TileLayer, Marker, Popup, useMap, useMapEvents } from 'react-leaflet';
 import L from 'leaflet';
 import axios from 'axios';
 import { Map as MapIcon, Play, RefreshCw, Ship, Anchor, Users, Navigation, Activity, LogOut, AlertTriangle, Trash2, UserMinus } from 'lucide-react';
@@ -18,9 +18,9 @@ const BOAT_CATEGORIES = {
 
 const boatIcon = (type, status = 'online', isMe = false) => {
   const colors = { online: '#2563eb', warning: '#f59e0b', lost: '#64748b' };
-  const color = isMe ? '#10b981' : (colors[status] || colors.online); // Verde se for o meu barco
+  const color = isMe ? '#10b981' : (colors[status] || colors.online);
   return L.divIcon({
-    html: `<div style="background-color: ${color}; border-radius: 50%; width: 40px; height: 40px; display: flex; align-items: center; justify-content: center; border: 3px solid white; box-shadow: 0 4px 10px rgba(0,0,0,0.4); transition: all 0.5s ease; ${isMe ? 'outline: 4px solid rgba(16,185,129,0.3);' : ''}">
+    html: `<div style="background-color: ${color}; border-radius: 50%; width: 40px; height: 40px; display: flex; align-items: center; justify-content: center; border: 3px solid white; box-shadow: 0 4px 10px rgba(0,0,0,0.4); transition: all 0.3s ease; ${isMe ? 'outline: 4px solid rgba(16,185,129,0.3);' : ''}">
             <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
               <path d="M2 12s3-2 10-2 10 2 10 2l-2 8H4l-2-8Z"/><path d="M12 10V2l4 4-4 4Z"/>
             </svg>
@@ -33,6 +33,79 @@ const clusterIcon = (count) => L.divIcon({
   html: `<div style="background-color: #1e3a8a; border-radius: 50%; width: 44px; height: 44px; display: flex; align-items: center; justify-content: center; border: 4px solid white; box-shadow: 0 4px 12px rgba(0,0,0,0.5); color: white; fontWeight: bold; font-size: 16px;">${count}</div>`,
   className: '', iconSize: [44, 44], iconAnchor: [22, 22]
 });
+
+// Camada Inteligente de Barcos (Lida com Clustering e Separação Dinâmica)
+function BoatLayer({ boats, trackingBoatId, selectedMapBoatId, setSelectedMapBoatId, expandedClusterId, setExpandedClusterId, currentTime, setView }) {
+  const map = useMap();
+  const [zoom, setZoom] = useState(map.getZoom());
+  
+  useMapEvents({
+    zoomend: () => setZoom(map.getZoom()),
+  });
+
+  const getBoatStatus = (lastUpdated) => {
+    if (!lastUpdated) return 'lost';
+    const diff = (currentTime - new Date(lastUpdated).getTime()) / 60000;
+    if (diff < 5) return 'online';
+    if (diff < 10) return 'warning';
+    return 'lost';
+  };
+
+  // Lógica de agrupamento baseada na distância visual (pixels) aproximada
+  const groups = [];
+  const processedIds = new Set();
+  const active = boats.filter(b => b.lat && b.lng && (currentTime - new Date(b.last_updated).getTime()) < 3600000);
+
+  // Distância de agrupamento diminui conforme o zoom aumenta
+  const clusterThreshold = 0.0004 * Math.pow(2, 16 - zoom);
+
+  active.forEach(b => {
+    if (processedIds.has(b.id)) return;
+    const near = active.filter(other => {
+      if (processedIds.has(other.id)) return false;
+      const dist = Math.sqrt(Math.pow(b.lat - other.lat, 2) + Math.pow(b.lng - other.lng, 2));
+      return dist < clusterThreshold;
+    });
+    near.forEach(n => processedIds.add(n.id));
+    groups.push({ anchor: b, members: near });
+  });
+
+  return (
+    <>
+      {groups.map(group => {
+        const { anchor, members } = group;
+        const isExpanded = expandedClusterId === anchor.id;
+
+        if (members.length === 1 || isExpanded) {
+          return members.map((boat, index) => {
+            // Offset dinâmico: mais espaço quando o zoom está mais longe
+            const spacing = 0.0006 * Math.pow(2, 16 - zoom);
+            const lngOffset = isExpanded ? (index * spacing) - ((members.length - 1) * spacing / 2) : 0;
+            
+            return (
+              <Marker 
+                key={boat.id} 
+                position={[boat.lat, boat.lng + lngOffset]} 
+                icon={boatIcon(boat.type, getBoatStatus(boat.last_updated), boat.id === trackingBoatId)}
+                eventHandlers={{ click: () => { setSelectedMapBoatId(boat.id); setExpandedClusterId(null); if (setView) setView('map'); } }}
+              >
+                <Popup><strong>{boat.name}</strong> {boat.id === trackingBoatId && '(Você)'}</Popup>
+              </Marker>
+            );
+          });
+        }
+        return (
+          <Marker 
+            key={`cluster-${anchor.id}`} 
+            position={[anchor.lat, anchor.lng]} 
+            icon={clusterIcon(members.length)} 
+            eventHandlers={{ click: () => setExpandedClusterId(anchor.id) }} 
+          />
+        );
+      })}
+    </>
+  );
+}
 
 function MapAutoZoom({ boats, selectedMapBoatId, focusBoatId }) {
   const map = useMap();
@@ -59,7 +132,6 @@ export default function App() {
   const [boats, setBoats] = useState([]);
   const [selectedMapBoatId, setSelectedMapBoatId] = useState(null);
   const [expandedClusterId, setExpandedClusterId] = useState(null);
-  
   const [boatName, setBoatName] = useState('');
   const [category, setCategory] = useState('');
   const [boatType, setBoatType] = useState('');
@@ -75,9 +147,7 @@ export default function App() {
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
-    if (params.get('u') === 'admin' && params.get('p') === 'lago2026') {
-      setView('admin'); window.history.replaceState({}, document.title, "/");
-    }
+    if (params.get('u') === 'admin' && params.get('p') === 'lago2026') { setView('admin'); window.history.replaceState({}, document.title, "/"); }
   }, []);
 
   useEffect(() => {
@@ -88,9 +158,7 @@ export default function App() {
 
   useEffect(() => {
     fetchBoats();
-    socket.on('config_updated', (data) => {
-      setRelayTimeout(data.relayTimeout); relayTimeoutRef.current = data.relayTimeout;
-    });
+    socket.on('config_updated', (data) => { setRelayTimeout(data.relayTimeout); relayTimeoutRef.current = data.relayTimeout; });
     socket.on('location_changed', (data) => {
       setBoats(prev => {
         if (!prev.find(b => b.id === data.boatId)) { fetchBoats(); return prev; }
@@ -109,28 +177,13 @@ export default function App() {
       if (trackingBoatId === data.id) stopTracking();
     });
     socket.on('control_taken', (data) => {
-      if (isTracking && trackingBoatId === data.boatId) {
-        alert("⚠️ Controle assumido por outra equipe!"); stopTracking(true);
-      }
+      if (isTracking && trackingBoatId === data.boatId) { alert("⚠️ Controle assumido por outra equipe!"); stopTracking(true); }
     });
-    return () => {
-      socket.off('config_updated'); socket.off('location_changed'); socket.off('boat_updated'); socket.off('boat_deleted'); socket.off('control_taken');
-    };
+    return () => { socket.off('config_updated'); socket.off('location_changed'); socket.off('boat_updated'); socket.off('boat_deleted'); socket.off('control_taken'); };
   }, [isTracking, trackingBoatId, selectedMapBoatId]);
 
   const fetchBoats = async () => {
-    try {
-      const res = await axios.get(`${API_URL}/api/boats`);
-      setBoats(res.data);
-    } catch (err) { console.error('Erro API:', err); }
-  };
-
-  const getBoatStatus = (lastUpdated) => {
-    if (!lastUpdated) return 'lost';
-    const diff = (currentTime - new Date(lastUpdated).getTime()) / 60000;
-    if (diff < 5) return 'online';
-    if (diff < 10) return 'warning';
-    return 'lost';
+    try { const res = await axios.get(`${API_URL}/api/boats`); setBoats(res.data); } catch (err) { console.error('Erro API:', err); }
   };
 
   const startNewTracking = async () => {
@@ -142,9 +195,7 @@ export default function App() {
   };
 
   const deleteBoat = async (id) => {
-    if (window.confirm('Remover barco?')) {
-      try { await axios.delete(`${API_URL}/api/boats/${id}`); } catch (err) { alert('Erro.'); }
-    }
+    if (window.confirm('Remover barco?')) { try { await axios.delete(`${API_URL}/api/boats/${id}`); } catch (err) { alert('Erro.'); } }
   };
 
   const activateHardwareGPS = async (id) => {
@@ -176,46 +227,20 @@ export default function App() {
     );
   };
 
-  const getVisibleBoatsWithClustering = () => {
-    const active = boats.filter(b => b.lat && b.lng && (currentTime - new Date(b.last_updated).getTime()) < 3600000);
-    const groups = [];
-    const processedIds = new Set();
-    active.forEach(b => {
-      if (processedIds.has(b.id)) return;
-      const near = active.filter(other => {
-        if (processedIds.has(other.id)) return false;
-        const dist = Math.sqrt(Math.pow(b.lat - other.lat, 2) + Math.pow(b.lng - other.lng, 2));
-        return dist < 0.0002; 
-      });
-      near.forEach(n => processedIds.add(n.id));
-      groups.push({ anchor: b, members: near });
-    });
-    return groups;
-  };
-
-  const trackFoundBoat = boats.find(b => b.name.toLowerCase() === boatName.toLowerCase());
-
-  // Renderizador comum de Mapa para ser usado em ambas as abas
   const renderMap = (focusId = null) => (
     <MapContainer center={[-15.7942, -47.8822]} zoom={13} style={{ height: '100%', width: '100%' }}>
       <TileLayer url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png" />
       <MapAutoZoom boats={boats} selectedMapBoatId={selectedMapBoatId} focusBoatId={focusId} />
-      {getVisibleBoatsWithClustering().map(group => {
-        const { anchor, members } = group;
-        if (members.length === 1 || expandedClusterId === anchor.id) {
-          return members.map((boat, index) => {
-            const lngOffset = expandedClusterId === anchor.id ? (index * 0.0004) : 0;
-            return (
-              <Marker key={boat.id} position={[boat.lat, boat.lng + lngOffset]} icon={boatIcon(boat.type, getBoatStatus(boat.last_updated), boat.id === trackingBoatId)} eventHandlers={{ click: () => { setSelectedMapBoatId(boat.id); setExpandedClusterId(null); if (view !== 'map') setView('map'); } }}>
-                <Popup><strong>{boat.name}</strong> {boat.id === trackingBoatId && '(Você)'}</Popup>
-              </Marker>
-            );
-          });
-        }
-        return (
-          <Marker key={`cluster-${anchor.id}`} position={[anchor.lat, anchor.lng]} icon={clusterIcon(members.length)} eventHandlers={{ click: () => setExpandedClusterId(anchor.id) }} />
-        );
-      })}
+      <BoatLayer 
+        boats={boats} 
+        trackingBoatId={trackingBoatId} 
+        selectedMapBoatId={selectedMapBoatId} 
+        setSelectedMapBoatId={setSelectedMapBoatId}
+        expandedClusterId={expandedClusterId}
+        setExpandedClusterId={setExpandedClusterId}
+        currentTime={currentTime}
+        setView={setView}
+      />
     </MapContainer>
   );
 
@@ -260,14 +285,14 @@ export default function App() {
                   <div style={{ display: 'flex', justifyContent: 'space-between' }}><Anchor size={40} color="#1e3a8a" />{boatName && <button onClick={() => setBoatName('')} style={{ background: '#f1f5f9', border: 'none', borderRadius: '8px', padding: '8px 12px', fontSize: '12px' }}>Limpar</button>}</div>
                   <h2 style={{ margin: '10px 0 5px 0' }}>Rastreador GPS</h2>
                   <input placeholder="Nome do Barco" value={boatName} onChange={e => setBoatName(e.target.value)} style={inputStyle} />
-                  {trackFoundBoat ? (
+                  {boats.find(b => b.name.toLowerCase() === boatName.toLowerCase()) ? (
                     <div style={{ background: '#f8fafc', padding: '15px', borderRadius: '12px', border: '1px solid #e2e8f0', marginTop: '15px', textAlign: 'left' }}>
-                      <div style={{ color: '#059669', fontWeight: 'bold', fontSize: '14px', marginBottom: '10px' }}>✓ {trackFoundBoat.type}</div>
+                      <div style={{ color: '#059669', fontWeight: 'bold', fontSize: '14px', marginBottom: '10px' }}>✓ {boats.find(b => b.name.toLowerCase() === boatName.toLowerCase()).type}</div>
                       <label style={labelStyle}>Sua Equipe</label>
                       <input placeholder="Nomes..." value={crewInput} onChange={e => setCrewInput(e.target.value)} style={inputStyle} />
                       <div style={{ display: 'flex', gap: '10px' }}>
-                        <button onClick={() => axios.post(`${API_URL}/api/boats/${trackFoundBoat.id}/queue`, { crew: crewInput.split(',').map(s => s.trim()) }).then(() => alert('Fila!'))} style={{ ...startBtnStyle, background: '#475569', flex: 1 }}>Fila</button>
-                        <button onClick={() => axios.post(`${API_URL}/api/boats/${trackFoundBoat.id}/take_control`, { new_crew: crewInput.split(',').map(s => s.trim()) }).then(() => activateHardwareGPS(trackFoundBoat.id))} style={{ ...startBtnStyle, flex: 1 }}>Assumir</button>
+                        <button onClick={() => axios.post(`${API_URL}/api/boats/${boats.find(b => b.name.toLowerCase() === boatName.toLowerCase()).id}/queue`, { crew: crewInput.split(',').map(s => s.trim()) }).then(() => alert('Fila!'))} style={{ ...startBtnStyle, background: '#475569', flex: 1 }}>Fila</button>
+                        <button onClick={() => axios.post(`${API_URL}/api/boats/${boats.find(b => b.name.toLowerCase() === boatName.toLowerCase()).id}/take_control`, { new_crew: crewInput.split(',').map(s => s.trim()) }).then(() => activateHardwareGPS(boats.find(b => b.name.toLowerCase() === boatName.toLowerCase()).id))} style={{ ...startBtnStyle, flex: 1 }}>Assumir</button>
                       </div>
                     </div>
                   ) : (
@@ -290,12 +315,7 @@ export default function App() {
                   </div>
                   <button onClick={() => stopTracking()} style={{ background: '#ef4444', color: 'white', border: 'none', padding: '8px 15px', borderRadius: '10px', fontWeight: 'bold', fontSize: '13px' }}>PARAR</button>
                 </div>
-                <div style={{ flex: 1, position: 'relative' }}>
-                  {renderMap(trackingBoatId)}
-                  <div style={{ position: 'absolute', bottom: '20px', left: '20px', right: '20px', background: 'rgba(255,255,255,0.9)', padding: '10px', borderRadius: '12px', zIndex: 1000, boxShadow: '0 4px 15px rgba(0,0,0,0.1)', fontSize: '12px', textAlign: 'center' }}>
-                    <strong>Dica:</strong> Mantenha a aba aberta. O mapa abaixo mostra sua posição (ícone verde) e dos outros barcos.
-                  </div>
-                </div>
+                <div style={{ flex: 1, position: 'relative' }}>{renderMap(trackingBoatId)}</div>
               </>
             )}
           </div>
