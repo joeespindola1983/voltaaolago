@@ -16,22 +16,22 @@ const BOAT_CATEGORIES = {
   'Outros': ['Surfski', 'Caiaque', 'Stand Up']
 };
 
-const boatIcon = (name, status = 'online', isMe = false, customColor) => {
+const boatIcon = (name, status = 'online', isMe = false, customColor, heading = 0) => {
   const statusColors = { online: '#2563eb', warning: '#f59e0b', lost: '#64748b' };
   const baseColor = customColor || (isMe ? '#10b981' : statusColors[status] || statusColors.online);
   
   return L.divIcon({
     html: `<div style="display: flex; flex-direction: column; align-items: center; width: 100px;">
-            <div style="background-color: ${baseColor}; border-radius: 50%; width: 40px; height: 40px; display: flex; align-items: center; justify-content: center; border: 3px solid white; box-shadow: 0 4px 10px rgba(0,0,0,0.4); ${isMe ? 'outline: 3px solid #10b981; outline-offset: 2px;' : ''}">
-              <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
-                <path d="M2 12s3-2 10-2 10 2 10 2l-2 8H4l-2-8Z"/><path d="M12 10V2l4 4-4 4Z"/>
+            <div style="background-color: ${baseColor}; border-radius: 50%; width: 42px; height: 42px; display: flex; align-items: center; justify-content: center; border: 3px solid white; box-shadow: 0 4px 10px rgba(0,0,0,0.4); ${isMe ? 'outline: 3px solid #10b981; outline-offset: 2px;' : ''}; transition: transform 0.5s ease; transform: rotate(${heading}deg);">
+              <svg width="26" height="26" viewBox="0 0 24 24" fill="white">
+                <path d="M12 2L4.5 20.29L5.21 21L12 18L18.79 21L19.5 20.29L12 2Z"/>
               </svg>
             </div>
-            <div style="background: rgba(255,255,255,0.9); padding: 2px 6px; border-radius: 4px; font-size: 10px; font-weight: bold; margin-top: 4px; border: 1px solid #cbd5e1; white-space: nowrap; color: #1e293b; box-shadow: 0 2px 4px rgba(0,0,0,0.1);">
+            <div style="background: rgba(255,255,255,0.9); padding: 2px 6px; border-radius: 4px; font-size: 10px; font-weight: bold; margin-top: 6px; border: 1px solid #cbd5e1; white-space: nowrap; color: #1e293b; box-shadow: 0 2px 4px rgba(0,0,0,0.1); transform: rotate(0deg);">
               ${name}
             </div>
            </div>`,
-    className: '', iconSize: [100, 60], iconAnchor: [50, 20], popupAnchor: [0, -20]
+    className: '', iconSize: [100, 70], iconAnchor: [50, 21], popupAnchor: [0, -20]
   });
 };
 
@@ -79,7 +79,7 @@ function BoatLayer({ boats, trackingBoatId, setSelectedMapBoatId, setClusterModa
           const diff = (currentTime - new Date(boat.last_updated).getTime()) / 60000;
           const status = diff < 5 ? 'online' : (diff < 10 ? 'warning' : 'lost');
           return (
-            <Marker key={boat.id} position={[boat.lat, boat.lng]} icon={boatIcon(boat.name, status, boat.id === trackingBoatId, boat.color)} eventHandlers={{ click: () => setSelectedMapBoatId(boat.id) }} />
+            <Marker key={boat.id} position={[boat.lat, boat.lng]} icon={boatIcon(boat.name, status, boat.id === trackingBoatId, boat.color, boat.heading)} eventHandlers={{ click: () => setSelectedMapBoatId(boat.id) }} />
           );
         }
         return (
@@ -193,6 +193,7 @@ export default function App() {
   const [lastSuccessfulUpdate, setLastSuccessfulUpdate] = useState(null);
   const [syncStatus, setSyncStatus] = useState('idle');
   const [nextSyncCountdown, setNextSyncCountdown] = useState(0);
+  const [gpsAccuracy, setGpsAccuracy] = useState(null);
   const isTrackingRef = useRef(false);
   const trackingBoatIdRef = useRef(trackingBoatId);
   const watchIdRef = useRef(null);
@@ -347,8 +348,10 @@ export default function App() {
             lat: pos.coords.latitude, 
             lng: pos.coords.longitude,
             speed: pos.coords.speed,
+            heading: pos.coords.heading,
             batteryLevel
           });
+          setGpsAccuracy(pos.coords.accuracy);
           lastSentRef.current = now;
         }
       },
@@ -729,6 +732,13 @@ export default function App() {
                       <div><span style={infoLabel}>Pace</span><br/><strong style={{ fontSize: '14px' }}>{calculatePace(boats.find(b => Number(b.id) === Number(trackingBoatId))?.speed)}</strong></div>
                     </div>
                   </div>
+
+                  {gpsAccuracy && (
+                    <div style={{ fontSize: '10px', color: gpsAccuracy > 30 ? '#ef4444' : '#64748b', textAlign: 'center', marginBottom: '10px', fontWeight: 'bold' }}>
+                      📡 Precisão do GPS: {Math.round(gpsAccuracy)}m 
+                      {gpsAccuracy > 30 ? ' (Sinal Fraco)' : ' (Sinal Forte)'}
+                    </div>
+                  )}
 
                   <div style={{ background: 'rgba(16,185,129,0.1)', padding: '10px', borderRadius: '12px', border: '1px solid rgba(16,185,129,0.2)' }}>
                     <div style={{ fontSize: '11px', color: '#065f46', fontWeight: 'bold', marginBottom: '4px', display: 'flex', alignItems: 'center', gap: '5px' }}>
