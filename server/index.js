@@ -19,6 +19,7 @@ const io = new Server(server, {
 
 // --- CONFIGURAÇÃO GLOBAL ---
 let globalRelayTimeout = 1; // em minutos
+let raceStartTime = null; // timestamp de início da prova
 
 // --- BANCO DE DADOS ---
 const connectionString = 'postgresql://voltaaolago_db_user:D9QmMI4tqhLgIKqz0k6HYul0Wcm6fWVT@dpg-d7j6l89j2pic73b9n7ug-a.virginia-postgres.render.com/voltaaolago_db';
@@ -107,16 +108,19 @@ app.get('/api/health', async (req, res) => {
 });
 
 app.get('/api/config', (req, res) => {
-  res.json({ relayTimeout: globalRelayTimeout });
+  res.json({ relayTimeout: globalRelayTimeout, raceStartTime });
 });
 
 app.post('/api/config', (req, res) => {
-  const { relayTimeout } = req.body;
+  const { relayTimeout, raceStartTime: newStartTime } = req.body;
   if (relayTimeout) {
     globalRelayTimeout = parseInt(relayTimeout) || 1;
-    io.emit('config_updated', { relayTimeout: globalRelayTimeout });
   }
-  res.json({ success: true, relayTimeout: globalRelayTimeout });
+  if (newStartTime !== undefined) {
+    raceStartTime = newStartTime;
+  }
+  io.emit('config_updated', { relayTimeout: globalRelayTimeout, raceStartTime });
+  res.json({ success: true, relayTimeout: globalRelayTimeout, raceStartTime });
 });
 
 app.get('/api/boats', async (req, res) => {
@@ -293,7 +297,7 @@ app.get('*', (req, res) => {
 // Socket.io
 io.on('connection', (socket) => {
   // Enviar configuração atual ao conectar
-  socket.emit('config_updated', { relayTimeout: globalRelayTimeout });
+  socket.emit('config_updated', { relayTimeout: globalRelayTimeout, raceStartTime });
 
   socket.on('update_location', async (data) => {
     const { boatId, lat, lng, speed, heading, batteryLevel } = data;

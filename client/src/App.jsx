@@ -149,6 +149,31 @@ function MapEventHandler({ onMapClick }) {
   return null;
 }
 
+function RaceClock({ startTime }) {
+  const [elapsed, setElapsed] = useState('');
+
+  useEffect(() => {
+    if (!startTime) return;
+    const interval = setInterval(() => {
+      const diff = Date.now() - startTime;
+      const hours = Math.floor(diff / 3600000);
+      const minutes = Math.floor((diff % 3600000) / 60000);
+      const seconds = Math.floor((diff % 60000) / 1000);
+      setElapsed(`${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`);
+    }, 1000);
+    return () => clearInterval(interval);
+  }, [startTime]);
+
+  if (!startTime) return null;
+
+  return (
+    <div style={{ position: 'absolute', top: '10px', left: '50%', transform: 'translateX(-50%)', zIndex: 1000, background: 'rgba(30,58,138,0.9)', color: 'white', padding: '8px 20px', borderRadius: '12px', boxShadow: '0 4px 10px rgba(0,0,0,0.3)', textAlign: 'center', border: '2px solid white' }}>
+      <div style={{ fontSize: '10px', fontWeight: 'bold', textTransform: 'uppercase', opacity: 0.8 }}>Tempo de Prova</div>
+      <div style={{ fontSize: '20px', fontWeight: '900', fontFamily: 'monospace' }}>{elapsed}</div>
+    </div>
+  );
+}
+
 export default function App() {
   const [view, setView] = useState(() => localStorage.getItem('vtl_view') || 'map');
   const [boats, setBoats] = useState([]);
@@ -172,6 +197,8 @@ export default function App() {
   const [isTracking, setIsTracking] = useState(false);
   const [trackingBoatId, setTrackingBoatId] = useState(() => localStorage.getItem('vtl_tracking_id'));
   const [isAdmin, setIsAdmin] = useState(() => localStorage.getItem('vtl_admin') === 'true');
+  const [activeRankingCategory, setActiveRankingCategory] = useState('Geral');
+  const [raceStartTime, setRaceStartTime] = useState(null);
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
@@ -233,7 +260,11 @@ export default function App() {
 
   useEffect(() => {
     fetchBoats();
-    socket.on('config_updated', (data) => { setRelayTimeout(data.relayTimeout); relayTimeoutRef.current = data.relayTimeout; });
+    socket.on('config_updated', (data) => { 
+      setRelayTimeout(data.relayTimeout); 
+      relayTimeoutRef.current = data.relayTimeout; 
+      setRaceStartTime(data.raceStartTime);
+    });
     socket.on('location_changed', (data) => {
       if (isTrackingRef.current && Number(trackingBoatIdRef.current) === Number(data.boatId)) {
         setLastSuccessfulUpdate(Date.now());
@@ -445,10 +476,6 @@ export default function App() {
             </div>
           </div>
         )}
-
-  const [activeRankingCategory, setActiveRankingCategory] = useState('Geral');
-
-...
 
         {view === 'ranking' && (
           <div style={{ padding: '20px', overflowY: 'auto', height: '100%' }}>
@@ -671,6 +698,7 @@ export default function App() {
             <div style={{ flex: selectedMapBoatId ? '0 0 55%' : '1 1 100%', transition: 'all 0.3s ease' }}>
               <MapContainer center={[-15.7942, -47.8822]} zoom={13} style={{ height: '100%', width: '100%' }}>
                 <TileLayer url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png" />
+                <RaceClock startTime={raceStartTime} />
                 <MapEventHandler onMapClick={() => setSelectedMapBoatId(null)} />
                 <MapAutoZoom boats={boats} selectedMapBoatId={selectedMapBoatId} focusBoatId={isTracking ? trackingBoatId : null} />
                 <BoatLayer boats={boats} trackingBoatId={trackingBoatId} setSelectedMapBoatId={setSelectedMapBoatId} setClusterModalBoats={setClusterModalBoats} currentTime={currentTime} />
@@ -830,6 +858,27 @@ export default function App() {
               </div>
             </div>
             
+            <div style={{ background: 'white', padding: '15px', borderRadius: '12px', marginBottom: '20px', border: '1px solid #e2e8f0' }}>
+              <label style={labelStyle}>Controle da Prova</label>
+              <div style={{ display: 'flex', gap: '10px' }}>
+                {!raceStartTime ? (
+                  <button 
+                    onClick={() => { if (window.confirm('Iniciar o cronômetro da prova para TODOS?')) axios.post(`${API_URL}/api/config`, { raceStartTime: Date.now() }); }} 
+                    style={{ ...startBtnStyle, background: '#10b981', flex: 1 }}
+                  >
+                    Iniciar Prova
+                  </button>
+                ) : (
+                  <button 
+                    onClick={() => { if (window.confirm('Resetar o cronômetro da prova?')) axios.post(`${API_URL}/api/config`, { raceStartTime: null }); }} 
+                    style={{ ...startBtnStyle, background: '#ef4444', flex: 1 }}
+                  >
+                    Resetar Cronômetro
+                  </button>
+                )}
+              </div>
+            </div>
+
             <div style={{ background: 'white', padding: '15px', borderRadius: '12px', marginBottom: '20px', border: '1px solid #e2e8f0' }}>
               <label style={labelStyle}>Intervalo de GPS (Global)</label>
               <select value={relayTimeout} onChange={(e) => axios.post(`${API_URL}/api/config`, { relayTimeout: e.target.value })} style={{ ...inputStyle, marginBottom: 0 }}>
