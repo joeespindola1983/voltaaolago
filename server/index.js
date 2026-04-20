@@ -156,6 +156,39 @@ app.post('/api/boats/:id/take_control', async (req, res) => {
   }
 });
 
+// Remover um barco completamente
+app.delete('/api/boats/:id', async (req, res) => {
+  const { id } = req.params;
+  try {
+    await pool.query('DELETE FROM boats WHERE id = $1', [id]);
+    io.emit('boat_deleted', { id: parseInt(id) });
+    res.json({ success: true });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Remover uma equipe da fila
+app.delete('/api/boats/:id/queue/:index', async (req, res) => {
+  const { id, index } = req.params;
+  try {
+    const boatRes = await pool.query('SELECT crew_queue FROM boats WHERE id = $1', [id]);
+    if (boatRes.rows.length === 0) return res.status(404).json({ error: 'Barco não encontrado' });
+    
+    let queue = boatRes.rows[0].crew_queue || [];
+    queue.splice(parseInt(index), 1);
+    
+    await pool.query('UPDATE boats SET crew_queue = $1 WHERE id = $2', [JSON.stringify(queue), id]);
+    
+    const updatedBoat = await pool.query('SELECT * FROM boats WHERE id = $1', [id]);
+    io.emit('boat_updated', updatedBoat.rows[0]);
+    
+    res.json({ success: true, queue });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // Fallback para Frontend se estiver no mesmo servidor
 app.use(express.static(path.join(__dirname, '../client/dist')));
 app.get('*', (req, res) => {

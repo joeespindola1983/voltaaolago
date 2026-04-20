@@ -3,7 +3,7 @@ import { io } from 'socket.io-client';
 import { MapContainer, TileLayer, Marker, Popup, useMap } from 'react-leaflet';
 import L from 'leaflet';
 import axios from 'axios';
-import { Map as MapIcon, Play, RefreshCw, Ship, Anchor, Users, Navigation, Activity, LogOut, AlertTriangle } from 'lucide-react';
+import { Map as MapIcon, Play, RefreshCw, Ship, Anchor, Users, Navigation, Activity, LogOut, AlertTriangle, Trash2, UserMinus } from 'lucide-react';
 
 // --- CONFIGURAÇÕES ---
 const BACKEND_URL = 'https://voltaaolago-backend.onrender.com';
@@ -86,6 +86,10 @@ export default function App() {
     socket.on('boat_updated', (updatedBoat) => {
       setBoats(prev => prev.map(b => b.id === updatedBoat.id ? { ...b, ...updatedBoat } : b));
     });
+    socket.on('boat_deleted', (data) => {
+      setBoats(prev => prev.filter(b => b.id !== data.id));
+      if (selectedMapBoatId === data.id) setSelectedMapBoatId(null);
+    });
     socket.on('control_taken', (data) => {
       if (isTracking && trackingBoatId === data.boatId) {
         alert("⚠️ Outra equipe assumiu o controle deste barco!");
@@ -93,9 +97,12 @@ export default function App() {
       }
     });
     return () => {
-      socket.off('location_changed'); socket.off('boat_updated'); socket.off('control_taken');
+      socket.off('location_changed'); 
+      socket.off('boat_updated'); 
+      socket.off('boat_deleted');
+      socket.off('control_taken');
     };
-  }, [isTracking, trackingBoatId]);
+  }, [isTracking, trackingBoatId, selectedMapBoatId]);
 
   const fetchBoats = async () => {
     try {
@@ -129,11 +136,27 @@ export default function App() {
   };
 
   const takeControl = async (id) => {
-    if (!crewInput) return alert('Digite seus nomes!');
+    if (!crewInput) return alert('Digite seus nomes antes de assumir!');
     try {
       await axios.post(`${API_URL}/api/boats/${id}/take_control`, { new_crew: crewInput.split(',').map(s => s.trim()) });
       await activateHardwareGPS(id);
     } catch (err) { alert('Erro ao assumir controle.'); }
+  };
+
+  const deleteBoat = async (id) => {
+    if (window.confirm('Tem certeza que deseja remover este barco completamente?')) {
+      try {
+        await axios.delete(`${API_URL}/api/boats/${id}`);
+      } catch (err) { alert('Erro ao remover barco.'); }
+    }
+  };
+
+  const removeFromQueue = async (boatId, index) => {
+    if (window.confirm('Remover esta equipe da fila?')) {
+      try {
+        await axios.delete(`${API_URL}/api/boats/${boatId}/queue/${index}`);
+      } catch (err) { alert('Erro ao remover da fila.'); }
+    }
   };
 
   const activateHardwareGPS = async (id) => {
@@ -280,12 +303,33 @@ export default function App() {
               <button onClick={() => setView('map')} style={{ background: '#475569', color: 'white', border: 'none', padding: '8px 15px', borderRadius: '8px' }}>Sair</button>
             </div>
             {boats.map(b => (
-              <div key={b.id} style={{ background: 'white', marginBottom: '10px', padding: '15px', borderRadius: '12px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', boxShadow: '0 2px 5px rgba(0,0,0,0.02)' }}>
-                <div>
-                  <div style={{ fontWeight: 'bold', fontSize: '16px' }}>{b.name}</div>
-                  <div style={{ fontSize: '13px', color: '#64748b' }}>{b.distance?.toFixed(2) || 0} km | {b.type}</div>
+              <div key={b.id} style={{ background: 'white', marginBottom: '15px', padding: '15px', borderRadius: '12px', boxShadow: '0 2px 5px rgba(0,0,0,0.02)' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <div>
+                    <div style={{ fontWeight: 'bold', fontSize: '16px' }}>{b.name}</div>
+                    <div style={{ fontSize: '13px', color: '#64748b' }}>{b.distance?.toFixed(2) || 0} km | {b.type}</div>
+                  </div>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                    <div style={{ color: getBoatStatus(b.last_updated) === 'online' ? '#059669' : '#94a3b8', fontSize: '11px', fontWeight: 'bold' }}>{getBoatStatus(b.last_updated).toUpperCase()}</div>
+                    <button onClick={() => deleteBoat(b.id)} style={{ background: 'none', border: 'none', color: '#ef4444', cursor: 'pointer', padding: '5px' }}>
+                      <Trash2 size={18} />
+                    </button>
+                  </div>
                 </div>
-                <div style={{ color: getBoatStatus(b.last_updated) === 'online' ? '#059669' : '#94a3b8', fontSize: '11px', fontWeight: 'bold' }}>{getBoatStatus(b.last_updated).toUpperCase()}</div>
+                
+                {b.crew_queue && b.crew_queue.length > 0 && (
+                  <div style={{ marginTop: '10px', paddingTop: '10px', borderTop: '1px solid #f1f5f9' }}>
+                    <div style={{ fontSize: '12px', fontWeight: 'bold', color: '#64748b', marginBottom: '5px' }}>Fila de Troca:</div>
+                    {b.crew_queue.map((q, i) => (
+                      <div key={i} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '13px', padding: '5px 0' }}>
+                        <span>#{i+1} {q.join(', ')}</span>
+                        <button onClick={() => removeFromQueue(b.id, i)} style={{ background: 'none', border: 'none', color: '#f59e0b', cursor: 'pointer' }}>
+                          <UserMinus size={14} />
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                )}
               </div>
             ))}
           </div>
