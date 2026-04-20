@@ -3,7 +3,7 @@ import { io } from 'socket.io-client';
 import { MapContainer, TileLayer, Marker, Popup, useMap } from 'react-leaflet';
 import L from 'leaflet';
 import axios from 'axios';
-import { Map as MapIcon, Settings, Play, RefreshCw, Ship, Anchor, Users, Navigation, Activity } from 'lucide-react';
+import { Map as MapIcon, Settings, Play, RefreshCw, Ship, Anchor, Users, Navigation, Activity, LogOut, AlertTriangle } from 'lucide-react';
 
 // --- CONFIGURAÇÕES ---
 const BACKEND_URL = 'https://voltaaolago-backend.onrender.com';
@@ -16,17 +16,28 @@ const BOAT_CATEGORIES = {
   'Outros': ['Surfski', 'Caiaque', 'Stand Up']
 };
 
-const boatIcon = (type) => L.divIcon({
-  html: `<div style="background-color: #2563eb; border-radius: 50%; width: 40px; height: 40px; display: flex; align-items: center; justify-content: center; border: 3px solid white; box-shadow: 0 4px 10px rgba(0,0,0,0.4);">
-          <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
-            <path d="M2 12s3-2 10-2 10 2 10 2l-2 8H4l-2-8Z"/><path d="M12 10V2l4 4-4 4Z"/>
-          </svg>
-         </div>`,
-  className: '',
-  iconSize: [40, 40],
-  iconAnchor: [20, 20],
-  popupAnchor: [0, -20]
-});
+// Ícone do Barco com cores dinâmicas baseadas no status do sinal
+const boatIcon = (type, status = 'online') => {
+  const colors = {
+    online: '#2563eb', // Azul
+    warning: '#f59e0b', // Amarelo (5-10 min)
+    lost: '#64748b'    // Cinza (> 10 min)
+  };
+  
+  const color = colors[status] || colors.online;
+
+  return L.divIcon({
+    html: `<div style="background-color: ${color}; border-radius: 50%; width: 40px; height: 40px; display: flex; align-items: center; justify-content: center; border: 3px solid white; box-shadow: 0 4px 10px rgba(0,0,0,0.4); transition: all 0.5s ease;">
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M2 12s3-2 10-2 10 2 10 2l-2 8H4l-2-8Z"/><path d="M12 10V2l4 4-4 4Z"/>
+            </svg>
+           </div>`,
+    className: '',
+    iconSize: [40, 40],
+    iconAnchor: [20, 20],
+    popupAnchor: [0, -20]
+  });
+};
 
 function MapAutoZoom({ boats, selectedMapBoatId }) {
   const map = useMap();
@@ -51,40 +62,38 @@ function MapAutoZoom({ boats, selectedMapBoatId }) {
 export default function App() {
   const [view, setView] = useState('map');
   const [boats, setBoats] = useState([]);
-  
-  // Estado para o Mapa (Split View)
   const [selectedMapBoatId, setSelectedMapBoatId] = useState(null);
-
-  // Estado para o Rastreador
   const [boatName, setBoatName] = useState('');
   const [category, setCategory] = useState('');
   const [boatType, setBoatType] = useState('');
   const [crewInput, setCrewInput] = useState('');
-  
   const [isTracking, setIsTracking] = useState(false);
   const [trackingBoatId, setTrackingBoatId] = useState(null);
+  const [currentTime, setCurrentTime] = useState(Date.now());
   
   const wakeLockRef = useRef(null);
   const audioRef = useRef(null);
 
+  // Timer para atualizar cores do mapa em tempo real
+  useEffect(() => {
+    const timer = setInterval(() => setCurrentTime(Date.now()), 30000);
+    return () => clearInterval(timer);
+  }, []);
+
   useEffect(() => {
     fetchBoats();
-    
     socket.on('location_changed', (data) => {
       setBoats(prev => prev.map(b => b.id === data.boatId ? { ...b, ...data, last_updated: data.lastUpdated } : b));
     });
-    
     socket.on('boat_updated', (updatedBoat) => {
       setBoats(prev => prev.map(b => b.id === updatedBoat.id ? { ...b, ...updatedBoat } : b));
     });
-
     socket.on('control_taken', (data) => {
       if (isTracking && trackingBoatId === data.boatId) {
         alert("⚠️ Outra equipe assumiu o controle deste barco! Sua transmissão foi encerrada.");
         stopTracking(true);
       }
     });
-
     return () => {
       socket.off('location_changed');
       socket.off('boat_updated');
@@ -99,16 +108,20 @@ export default function App() {
     } catch (err) { console.error('Erro API:', err); }
   };
 
+  const getBoatStatus = (lastUpdated) => {
+    if (!lastUpdated) return 'lost';
+    const diff = (currentTime - new Date(lastUpdated).getTime()) / 60000;
+    if (diff < 5) return 'online';
+    if (diff < 10) return 'warning';
+    return 'lost';
+  };
+
   const getCrewArray = () => crewInput.split(',').map(s => s.trim()).filter(s => s);
 
   const startNewTracking = async () => {
-    if (!boatName || !boatType || !crewInput) return alert('Preencha nome, tipo e os remadores!');
+    if (!boatName || !boatType || !crewInput) return alert('Preencha nome, tipo e remadores!');
     try {
-      const res = await axios.post(`${API_URL}/api/boats`, { 
-        name: boatName, 
-        type: boatType,
-        current_crew: getCrewArray()
-      });
+      const res = await axios.post(`${API_URL}/api/boats`, { name: boatName, type: boatType, current_crew: getCrewArray() });
       await activateHardwareGPS(res.data.id);
     } catch (err) { alert('Erro ao criar barco.'); }
   };
@@ -117,13 +130,13 @@ export default function App() {
     if (!crewInput) return alert('Digite os nomes dos remadores!');
     try {
       await axios.post(`${API_URL}/api/boats/${id}/queue`, { crew: getCrewArray() });
-      alert('Vocês foram adicionados à fila de troca!');
+      alert('Fila de troca atualizada!');
       setCrewInput('');
     } catch (err) { alert('Erro ao entrar na fila.'); }
   };
 
   const takeControl = async (id) => {
-    if (!crewInput) return alert('Digite seus nomes antes de assumir o barco!');
+    if (!crewInput) return alert('Digite seus nomes antes de assumir!');
     try {
       await axios.post(`${API_URL}/api/boats/${id}/take_control`, { new_crew: getCrewArray() });
       await activateHardwareGPS(id);
@@ -139,7 +152,7 @@ export default function App() {
       setTrackingBoatId(id);
       setIsTracking(true);
       trackLocation(id);
-    } catch (err) { alert('Erro ao iniciar GPS. Use HTTPS.'); }
+    } catch (err) { alert('Erro GPS. Use HTTPS.'); }
   };
 
   const stopTracking = (forceMap = false) => {
@@ -151,17 +164,32 @@ export default function App() {
     else window.location.reload();
   };
 
+  const resetLocalState = () => {
+    setBoatName('');
+    setCategory('');
+    setBoatType('');
+    setCrewInput('');
+    alert('Identificação limpa. Você pode selecionar outro barco agora.');
+  };
+
   const trackLocation = (id) => {
     if (!navigator.geolocation) return;
     navigator.geolocation.getCurrentPosition(
       (pos) => {
         socket.emit('update_location', { boatId: id, lat: pos.coords.latitude, lng: pos.coords.longitude });
-        if (isTracking) setTimeout(() => trackLocation(id), 60000); // 1 minuto
+        if (isTracking) setTimeout(() => trackLocation(id), 60000);
       },
       (err) => { if (isTracking) setTimeout(() => trackLocation(id), 15000); },
       { enableHighAccuracy: true, timeout: 25000, maximumAge: 0 }
     );
   };
+
+  // Filtrar barcos inativos há mais de 1 hora no Mapa
+  const visibleBoats = boats.filter(b => {
+    if (!b.last_updated) return true;
+    const diff = (currentTime - new Date(b.last_updated).getTime()) / 3600000;
+    return diff < 1; // 1 hora
+  });
 
   const mapSelectedBoat = boats.find(b => b.id === selectedMapBoatId);
   const trackFoundBoat = boats.find(b => b.name.toLowerCase() === boatName.toLowerCase());
@@ -181,12 +209,12 @@ export default function App() {
             <div style={{ flex: selectedMapBoatId ? '0 0 55%' : '1 1 100%', transition: 'all 0.3s ease' }}>
               <MapContainer center={[-15.7942, -47.8822]} zoom={13} style={{ height: '100%', width: '100%' }}>
                 <TileLayer url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png" />
-                <MapAutoZoom boats={boats} selectedMapBoatId={selectedMapBoatId} />
-                {boats.map(boat => boat.lat && (
+                <MapAutoZoom boats={visibleBoats} selectedMapBoatId={selectedMapBoatId} />
+                {visibleBoats.map(boat => boat.lat && (
                   <Marker 
                     key={boat.id} 
                     position={[boat.lat, boat.lng]} 
-                    icon={boatIcon(boat.type)}
+                    icon={boatIcon(boat.type, getBoatStatus(boat.last_updated))}
                     eventHandlers={{ click: () => setSelectedMapBoatId(boat.id) }}
                   >
                     {!selectedMapBoatId && (
@@ -204,6 +232,12 @@ export default function App() {
                   <span style={{ background: '#e0f2fe', color: '#0369a1', padding: '4px 10px', borderRadius: '12px', fontSize: '12px', fontWeight: 'bold' }}>{mapSelectedBoat.type}</span>
                 </div>
                 
+                {getBoatStatus(mapSelectedBoat.last_updated) !== 'online' && (
+                  <div style={{ background: '#fff7ed', color: '#9a3412', padding: '10px', borderRadius: '10px', fontSize: '13px', marginBottom: '15px', display: 'flex', alignItems: 'center', gap: '8px', border: '1px solid #ffedd5' }}>
+                    <AlertTriangle size={18} /> Sinal instável! Última posição há {Math.floor((currentTime - new Date(mapSelectedBoat.last_updated).getTime()) / 60000)} minutos.
+                  </div>
+                )}
+
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px', marginBottom: '20px' }}>
                   <div style={infoCardStyle}>
                     <Navigation size={16} color="#059669" />
@@ -253,8 +287,15 @@ export default function App() {
           <div style={{ padding: '30px 20px', overflowY: 'auto', width: '100%', boxSizing: 'border-box' }}>
             {!isTracking ? (
               <div style={{ background: 'white', padding: '25px', borderRadius: '20px', boxShadow: '0 4px 15px rgba(0,0,0,0.05)', maxWidth: '500px', margin: '0 auto' }}>
-                <Anchor size={40} color="#1e3a8a" style={{ marginBottom: '10px' }} />
-                <h2 style={{ margin: '0 0 5px 0', color: '#1e293b' }}>Rastreador GPS</h2>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+                  <Anchor size={40} color="#1e3a8a" />
+                  {boatName && (
+                    <button onClick={resetLocalState} style={{ background: '#f1f5f9', border: 'none', borderRadius: '8px', padding: '8px 12px', color: '#475569', fontSize: '12px', display: 'flex', alignItems: 'center', gap: '5px', cursor: 'pointer' }}>
+                      <LogOut size={14} /> Sair deste Barco
+                    </button>
+                  )}
+                </div>
+                <h2 style={{ margin: '10px 0 5px 0', color: '#1e293b' }}>Rastreador GPS</h2>
                 <p style={{ color: '#64748b', marginBottom: '20px', fontSize: '14px' }}>Informe o barco e a tripulação.</p>
                 
                 <label style={labelStyle}>Nome do Barco</label>
@@ -268,15 +309,15 @@ export default function App() {
                       <strong>Distância:</strong> {trackFoundBoat.distance?.toFixed(2) || 0} km
                     </div>
                     
-                    <label style={labelStyle}>Nomes da Sua Equipe (separados por vírgula)</label>
+                    <label style={labelStyle}>Sua Equipe (Nomes)</label>
                     <input placeholder="Ex: João, Maria" value={crewInput} onChange={e => setCrewInput(e.target.value)} style={inputStyle} />
                     
-                    <button onClick={() => joinQueue(trackFoundBoat.id)} style={{ ...startBtnStyle, background: '#475569', marginTop: '10px' }}>Entrar na Fila de Troca</button>
-                    <button onClick={() => takeControl(trackFoundBoat.id)} style={{ ...startBtnStyle, marginTop: '10px' }}>Assumir Controle do GPS</button>
+                    <button onClick={() => joinQueue(trackFoundBoat.id)} style={{ ...startBtnStyle, background: '#475569', marginTop: '10px' }}>Entrar na Fila</button>
+                    <button onClick={() => takeControl(trackFoundBoat.id)} style={{ ...startBtnStyle, marginTop: '10px' }}>Assumir Controle</button>
                   </div>
                 ) : (
                   <div style={{ marginTop: '15px', textAlign: 'left' }}>
-                    <label style={labelStyle}>Categoria e Tipo (Barco Novo)</label>
+                    <label style={labelStyle}>Categoria e Tipo</label>
                     <select style={inputStyle} onChange={(e) => { setCategory(e.target.value); setBoatType(''); }} value={category}>
                       <option value="">Selecione...</option>
                       {Object.keys(BOAT_CATEGORIES).map(cat => <option key={cat} value={cat}>{cat}</option>)}
@@ -287,10 +328,8 @@ export default function App() {
                         {BOAT_CATEGORIES[category].map(type => <option key={type} value={type}>{type}</option>)}
                       </select>
                     )}
-                    
-                    <label style={{ ...labelStyle, marginTop: '10px' }}>Nomes dos Remadores</label>
+                    <label style={{ ...labelStyle, marginTop: '10px' }}>Sua Equipe (Nomes)</label>
                     <input placeholder="Ex: João, Maria" value={crewInput} onChange={e => setCrewInput(e.target.value)} style={inputStyle} />
-                    
                     <button onClick={startNewTracking} style={startBtnStyle}>Criar e Iniciar GPS</button>
                   </div>
                 )}
@@ -300,18 +339,10 @@ export default function App() {
                 <div style={{ animation: 'pulse 2s infinite', fontSize: '40px' }}>📡</div>
                 <h2 style={{ color: '#059669', margin: '15px 0' }}>TRANSMITINDO</h2>
                 <p style={{ fontSize: '20px', margin: '5px 0' }}><strong>{trackFoundBoat?.name || boatName}</strong></p>
-                <p style={{ color: '#64748b' }}>Sua Equipe: {crewInput}</p>
-                
-                <div style={{ margin: '30px auto', padding: '15px', background: 'rgba(255,255,255,0.7)', borderRadius: '12px', fontSize: '15px', maxWidth: '300px' }}>
-                  <Navigation size={18} style={{ verticalAlign: 'middle', marginRight: '5px' }} /> 
-                  Distância Total: <strong>{trackFoundBoat?.distance?.toFixed(2) || 0} km</strong>
-                </div>
-
                 <div style={{ background: '#fef3c7', padding: '15px', borderRadius: '12px', fontSize: '13px', color: '#92400e', marginBottom: '25px', textAlign: 'left' }}>
-                  ⚠️ Mantenha esta aba aberta para o GPS não parar. O celular pode ser bloqueado, mas não feche o Safari/Chrome.
+                  ⚠️ Mantenha esta aba aberta. O GPS do celular só funciona com o navegador ativo.
                 </div>
-
-                <button onClick={() => stopTracking()} style={stopBtnStyle}>Encerrar Minha Transmissão</button>
+                <button onClick={() => stopTracking()} style={stopBtnStyle}>Encerrar Transmissão</button>
               </div>
             )}
           </div>
@@ -324,10 +355,10 @@ export default function App() {
               <div key={b.id} style={{ background: 'white', marginBottom: '10px', padding: '15px', borderRadius: '12px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', boxShadow: '0 2px 5px rgba(0,0,0,0.02)' }}>
                 <div>
                   <div style={{ fontWeight: 'bold', fontSize: '16px' }}>{b.name}</div>
-                  <div style={{ fontSize: '13px', color: '#64748b' }}>{b.distance?.toFixed(2) || 0} km percorridos</div>
+                  <div style={{ fontSize: '13px', color: '#64748b' }}>{b.distance?.toFixed(2) || 0} km</div>
                 </div>
-                <div style={{ color: b.lat ? '#059669' : '#cbd5e1', fontSize: '12px', fontWeight: 'bold', background: b.lat ? '#ecfdf5' : '#f8fafc', padding: '6px 12px', borderRadius: '20px' }}>
-                  {b.lat ? 'ONLINE' : 'OFFLINE'}
+                <div style={{ color: getBoatStatus(b.last_updated) === 'online' ? '#059669' : '#94a3b8', fontSize: '11px', fontWeight: 'bold' }}>
+                  {getBoatStatus(b.last_updated).toUpperCase()}
                 </div>
               </div>
             ))}
