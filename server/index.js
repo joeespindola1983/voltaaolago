@@ -290,6 +290,19 @@ app.post('/api/boats/:id/reset', async (req, res) => {
   }
 });
 
+// Resetar TODOS os barcos (Ação Global Admin)
+app.post('/api/admin/reset_all', async (req, res) => {
+  try {
+    await pool.query('UPDATE boats SET distance = 0, speed = 0, lat = NULL, lng = NULL, sos_active = false');
+    await pool.query('DELETE FROM location_history');
+    await pool.query('DELETE FROM exchange_logs');
+    io.emit('config_updated', { relayTimeout: globalRelayTimeout, raceStartTime: null });
+    res.json({ success: true });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // Buscar logs de trechos de um barco
 app.get('/api/boats/:id/splits', async (req, res) => {
   try {

@@ -21,19 +21,21 @@ const BOAT_CATEGORIES = {
   'Outros': ['Surfski', 'Caiaque', 'Stand Up']
 };
 
-const boatIcon = (name, status = 'online', isMe = false, customColor, heading = 0, isSos = false) => {
+const boatIcon = (name, status = 'online', isMe = false, customColor, heading = 0, isSos = false, isLeader = false) => {
   const statusColors = { online: '#2563eb', warning: '#f59e0b', lost: '#64748b' };
   const baseColor = isSos ? '#ef4444' : (customColor || (isMe ? '#10b981' : statusColors[status] || statusColors.online));
   const animation = isSos ? 'pulse 0.5s infinite' : 'none';
+  const glow = isLeader ? '0 0 15px #f59e0b, 0 0 5px #f59e0b' : '0 4px 10px rgba(0,0,0,0.4)';
   
   return L.divIcon({
     html: `<div style="display: flex; flex-direction: column; align-items: center; width: 100px;">
-            <div style="background-color: ${baseColor}; border-radius: 50%; width: 42px; height: 42px; display: flex; align-items: center; justify-content: center; border: 3px solid white; box-shadow: 0 4px 10px rgba(0,0,0,0.4); ${isMe ? 'outline: 3px solid #10b981; outline-offset: 2px;' : ''}; transition: transform 0.5s ease; transform: rotate(${heading}deg); animation: ${animation};">
+            <div style="background-color: ${baseColor}; border-radius: 50%; width: 42px; height: 42px; display: flex; align-items: center; justify-content: center; border: 3px solid ${isLeader ? '#f59e0b' : 'white'}; box-shadow: ${glow}; ${isMe ? 'outline: 3px solid #10b981; outline-offset: 2px;' : ''}; transition: transform 0.5s ease; transform: rotate(${heading}deg); animation: ${animation};">
               <svg width="26" height="26" viewBox="0 0 24 24" fill="white">
                 <path d="M12 2L4.5 20.29L5.21 21L12 18L18.79 21L19.5 20.29L12 2Z"/>
               </svg>
+              ${isLeader ? '<div style="position: absolute; top: -10px; right: -10px; background: #f59e0b; border-radius: 50%; width: 20px; height: 20px; display: flex; align-items: center; justify-content: center; border: 2px solid white; box-shadow: 0 2px 4px rgba(0,0,0,0.2); transform: rotate(' + (-heading) + 'deg); font-size: 10px;">🏆</div>' : ''}
             </div>
-            <div style="background: ${isSos ? '#ef4444' : 'rgba(255,255,255,0.9)'}; color: ${isSos ? '#fff' : '#1e293b'}; padding: 2px 6px; border-radius: 4px; font-size: 10px; font-weight: bold; margin-top: 6px; border: 1px solid ${isSos ? '#b91c1c' : '#cbd5e1'}; white-space: nowrap; box-shadow: 0 2px 4px rgba(0,0,0,0.1); transform: rotate(0deg);">
+            <div style="background: ${isSos ? '#ef4444' : 'rgba(255,255,255,0.9)'}; color: ${isSos ? '#fff' : '#1e293b'}; padding: 2px 6px; border-radius: 4px; font-size: 10px; font-weight: bold; margin-top: 6px; border: 1px solid ${isSos ? '#b91c1c' : (isLeader ? '#f59e0b' : '#cbd5e1')}; white-space: nowrap; box-shadow: 0 2px 4px rgba(0,0,0,0.1); transform: rotate(0deg);">
               ${isSos ? '⚠️ SOS: ' : ''}${name}
             </div>
            </div>`,
@@ -67,6 +69,14 @@ function BoatLayer({ boats, trackingBoatId, setSelectedMapBoatId, setClusterModa
     groups.push({ anchor: b, members: near });
   });
 
+  // Identificar líderes de categoria para destaque visual
+  const categoryLeaders = {};
+  boats.forEach(b => {
+    if (!categoryLeaders[b.category] || (b.distance > (categoryLeaders[b.category].distance || 0))) {
+      categoryLeaders[b.category] = b;
+    }
+  });
+
   return (
     <>
       {active.map(b => (
@@ -84,8 +94,10 @@ function BoatLayer({ boats, trackingBoatId, setSelectedMapBoatId, setClusterModa
           const boat = members[0];
           const diff = (currentTime - new Date(boat.last_updated).getTime()) / 60000;
           const status = diff < 5 ? 'online' : (diff < 10 ? 'warning' : 'lost');
+          const isLeader = categoryLeaders[boat.category]?.id === boat.id && boat.distance > 0;
+          
           return (
-            <Marker key={boat.id} position={[boat.lat, boat.lng]} icon={boatIcon(boat.name, status, boat.id === trackingBoatId, boat.color, boat.heading, boat.sos_active)} eventHandlers={{ click: () => setSelectedMapBoatId(boat.id) }} />
+            <Marker key={boat.id} position={[boat.lat, boat.lng]} icon={boatIcon(boat.name, status, boat.id === trackingBoatId, boat.color, boat.heading, boat.sos_active, isLeader)} eventHandlers={{ click: () => setSelectedMapBoatId(boat.id) }} />
           );
         }
         return (
@@ -1090,8 +1102,19 @@ export default function App() {
                   >
                     Resetar Cronômetro
                   </button>
-                )}
-              </div>
+                  </div>
+                  <button 
+                  onClick={async () => { 
+                    if (window.confirm('CUIDADO! Isso vai ZERAR TODOS os barcos, apagar todos os rastros e tempos de trecho. Tem certeza absoluta?')) {
+                      await axios.post(`${API_URL}/api/admin/reset_all`);
+                      fetchBoats();
+                    }
+                  }} 
+                  style={{ ...startBtnStyle, background: '#000', marginTop: '10px' }}
+                  >
+                  Limpeza Total (Reset Geral)
+                  </button>
+                  </div>
             </div>
 
             <div style={{ background: 'white', padding: '15px', borderRadius: '12px', marginBottom: '20px', border: '1px solid #e2e8f0' }}>
