@@ -105,8 +105,11 @@ export default function App() {
   const [isTracking, setIsTracking] = useState(false);
   const [trackingBoatId, setTrackingBoatId] = useState(null);
   const [lastSuccessfulUpdate, setLastSuccessfulUpdate] = useState(null);
+  const [syncStatus, setSyncStatus] = useState('idle'); // 'idle', 'sending', 'ok', 'error'
   const isTrackingRef = useRef(false);
   const trackingBoatIdRef = useRef(null);
+  const watchIdRef = useRef(null);
+  const lastSentRef = useRef(0);
   const [currentTime, setCurrentTime] = useState(Date.now());
   const [relayTimeout, setRelayTimeout] = useState(1);
   const relayTimeoutRef = useRef(1);
@@ -133,6 +136,7 @@ export default function App() {
     socket.on('location_changed', (data) => {
       if (isTrackingRef.current && Number(trackingBoatIdRef.current) === Number(data.boatId)) {
         setLastSuccessfulUpdate(Date.now());
+        setSyncStatus('ok');
       }
       setBoats(prev => {
         if (!prev.find(b => Number(b.id) === Number(data.boatId))) { fetchBoats(); return prev; }
@@ -184,6 +188,8 @@ export default function App() {
     isTrackingRef.current = false;
     setTrackingBoatId(null);
     trackingBoatIdRef.current = null;
+    setSyncStatus('idle');
+    if (watchIdRef.current) navigator.geolocation.clearWatch(watchIdRef.current);
     if (wakeLockRef.current) wakeLockRef.current.release();
     if (audioRef.current) audioRef.current.pause();
     if (forceMap) setView('map'); else window.location.reload();
@@ -192,17 +198,34 @@ export default function App() {
   const trackLocation = (id) => {
     if (!isTrackingRef.current) return;
     if (!navigator.geolocation) return;
-    navigator.geolocation.getCurrentPosition(
+
+    if (watchIdRef.current) navigator.geolocation.clearWatch(watchIdRef.current);
+
+    const watchId = navigator.geolocation.watchPosition(
       (pos) => {
         if (!isTrackingRef.current) return;
-        socket.emit('update_location', { boatId: id, lat: pos.coords.latitude, lng: pos.coords.longitude });
-        setTimeout(() => trackLocation(id), relayTimeoutRef.current * 60000);
+        
+        const now = Date.now();
+        // Respeita o relayTimeout configurado (evita spam de dados)
+        if (!lastSentRef.current || (now - lastSentRef.current) >= (relayTimeoutRef.current * 60000)) {
+          setSyncStatus('sending');
+          socket.emit('update_location', { 
+            boatId: id, 
+            lat: pos.coords.latitude, 
+            lng: pos.coords.longitude 
+          });
+          lastSentRef.current = now;
+          // O setSyncStatus('ok') virá via socket no listener de location_changed
+        }
       },
       (err) => { 
-        if (isTrackingRef.current) setTimeout(() => trackLocation(id), 15000); 
+        console.error("GPS Error:", err);
+        setSyncStatus('error');
       },
-      { enableHighAccuracy: true, timeout: 25000, maximumAge: 0 }
+      { enableHighAccuracy: true, timeout: 20000, maximumAge: 0 }
     );
+    
+    watchIdRef.current = watchId;
   };
 
   const BoatDetails = ({ boat, onClose }) => (
@@ -310,11 +333,17 @@ export default function App() {
                     <BoatLayer boats={boats} trackingBoatId={trackingBoatId} setSelectedMapBoatId={setSelectedMapBoatId} setClusterModalBoats={setClusterModalBoats} currentTime={currentTime} />
                   </MapContainer>
 
-                  {/* Indicador de Sincronização Flutuante */}
+                  {/* Indicador de Sincronização Flutuante Melhorado */}
                   <div style={{ position: 'absolute', bottom: '20px', left: '50%', transform: 'translateX(-50%)', zIndex: 1000, background: 'rgba(255,255,255,0.95)', padding: '10px 20px', borderRadius: '30px', boxShadow: '0 4px 15px rgba(0,0,0,0.15)', display: 'flex', alignItems: 'center', gap: '10px', border: '1px solid #e2e8f0', whiteSpace: 'nowrap' }}>
-                    <div style={{ width: '12px', height: '12px', borderRadius: '50%', background: lastSuccessfulUpdate ? '#10b981' : '#f59e0b', animation: lastSuccessfulUpdate ? 'none' : 'pulse 1.5s infinite' }} />
+                    <div style={{ 
+                      width: '12px', height: '12px', borderRadius: '50%', 
+                      background: syncStatus === 'error' ? '#ef4444' : (syncStatus === 'sending' ? '#2563eb' : (lastSuccessfulUpdate ? '#10b981' : '#f59e0b')),
+                      animation: (syncStatus === 'sending' || !lastSuccessfulUpdate) ? 'pulse 1s infinite' : 'none'
+                    }} />
                     <span style={{ fontSize: '14px', fontWeight: 'bold', color: '#1e293b' }}>
-                      {lastSuccessfulUpdate 
+                      {syncStatus === 'sending' ? '📡 Enviando coordenadas...' : 
+                       syncStatus === 'error' ? '⚠️ Erro de GPS' :
+                       lastSuccessfulUpdate 
                         ? `Sincronizado: ${Math.floor((currentTime - lastSuccessfulUpdate) / 60000)} min atrás` 
                         : 'Aguardando sinal GPS...'}
                     </span>
