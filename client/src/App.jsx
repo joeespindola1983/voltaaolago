@@ -387,6 +387,10 @@ export default function App() {
     if (isApp) {
       Geolocation.requestPermissions().then(status => {
         if (status.location !== 'granted') alert('O App precisa de permissão de GPS para funcionar!');
+        // No Android 11+, a permissão de background deve ser pedida separadamente ou via configurações
+        if (status.location === 'granted') {
+          console.log('Permissão de GPS concedida. Verifique se o modo "Sempre permitir" está ativo nas configurações para rastreio com tela bloqueada.');
+        }
       });
     }
     fetchBoats();
