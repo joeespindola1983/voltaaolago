@@ -20,6 +20,7 @@ const io = new Server(server, {
 // --- CONFIGURAÇÃO GLOBAL ---
 let globalRelayTimeout = 1; // em minutos
 let raceStartTime = null; // timestamp de início da prova
+let lastBroadcast = { message: '', timestamp: null };
 
 // --- BANCO DE DADOS ---
 const connectionString = 'postgresql://voltaaolago_db_user:D9QmMI4tqhLgIKqz0k6HYul0Wcm6fWVT@dpg-d7j6l89j2pic73b9n7ug-a.virginia-postgres.render.com/voltaaolago_db';
@@ -121,19 +122,23 @@ app.get('/api/health', async (req, res) => {
 });
 
 app.get('/api/config', (req, res) => {
-  res.json({ relayTimeout: globalRelayTimeout, raceStartTime });
+  res.json({ relayTimeout: globalRelayTimeout, raceStartTime, lastBroadcast });
 });
 
 app.post('/api/config', (req, res) => {
-  const { relayTimeout, raceStartTime: newStartTime } = req.body;
+  const { relayTimeout, raceStartTime: newStartTime, broadcast } = req.body;
   if (relayTimeout) {
     globalRelayTimeout = parseInt(relayTimeout) || 1;
   }
   if (newStartTime !== undefined) {
     raceStartTime = newStartTime;
   }
-  io.emit('config_updated', { relayTimeout: globalRelayTimeout, raceStartTime });
-  res.json({ success: true, relayTimeout: globalRelayTimeout, raceStartTime });
+  if (broadcast !== undefined) {
+    lastBroadcast = { message: broadcast, timestamp: broadcast ? Date.now() : null };
+    io.emit('broadcast_received', lastBroadcast);
+  }
+  io.emit('config_updated', { relayTimeout: globalRelayTimeout, raceStartTime, lastBroadcast });
+  res.json({ success: true, relayTimeout: globalRelayTimeout, raceStartTime, lastBroadcast });
 });
 
 app.get('/api/boats', async (req, res) => {
@@ -396,7 +401,7 @@ app.get('*', (req, res) => {
 // Socket.io
 io.on('connection', (socket) => {
   // Enviar configuração atual ao conectar
-  socket.emit('config_updated', { relayTimeout: globalRelayTimeout, raceStartTime });
+  socket.emit('config_updated', { relayTimeout: globalRelayTimeout, raceStartTime, lastBroadcast });
 
   socket.on('update_location', async (data) => {
     const { boatId, lat, lng, speed, heading, batteryLevel } = data;

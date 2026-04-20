@@ -192,6 +192,21 @@ function RaceClock({ startTime }) {
   );
 }
 
+function BroadcastBar({ broadcast }) {
+  if (!broadcast || !broadcast.message) return null;
+  return (
+    <div style={{ background: '#ef4444', color: 'white', padding: '10px 15px', display: 'flex', alignItems: 'center', gap: '10px', boxShadow: '0 2px 10px rgba(239,68,68,0.3)', zIndex: 1100 }}>
+      <AlertTriangle size={18} />
+      <div style={{ flex: 1, fontSize: '13px', fontWeight: 'bold' }}>
+        <marquee scrollamount="5">{broadcast.message}</marquee>
+      </div>
+      <div style={{ fontSize: '10px', opacity: 0.8 }}>
+        {new Date(broadcast.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+      </div>
+    </div>
+  );
+}
+
 export default function App() {
   const [view, setView] = useState(() => localStorage.getItem('vtl_view') || 'map');
   const [boats, setBoats] = useState([]);
@@ -218,6 +233,8 @@ export default function App() {
   const [isAdmin, setIsAdmin] = useState(() => localStorage.getItem('vtl_admin') === 'true');
   const [activeRankingCategory, setActiveRankingCategory] = useState('Geral');
   const [raceStartTime, setRaceStartTime] = useState(null);
+  const [broadcast, setBroadcast] = useState({ message: '', timestamp: null });
+  const [broadcastInput, setBroadcastInput] = useState('');
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
@@ -319,6 +336,10 @@ export default function App() {
       setRelayTimeout(data.relayTimeout); 
       relayTimeoutRef.current = data.relayTimeout; 
       setRaceStartTime(data.raceStartTime);
+      if (data.lastBroadcast) setBroadcast(data.lastBroadcast);
+    });
+    socket.on('broadcast_received', (data) => {
+      setBroadcast(data);
     });
     socket.on('sos_alert', (data) => {
       alert(`🚨 EMERGÊNCIA: O barco ${data.boatName} ativou o SOS!`);
@@ -605,6 +626,7 @@ export default function App() {
 
   return (
     <div style={{ height: '100%', display: 'flex', flexDirection: 'column', background: '#f8fafc' }}>
+      <BroadcastBar broadcast={broadcast} />
       <nav style={{ background: '#1e3a8a', color: 'white', padding: '12px 10px', display: 'flex', justifyContent: 'space-around', zIndex: 1000, boxShadow: '0 2px 10px rgba(0,0,0,0.2)' }}>
         <button onClick={() => { setView('map'); setSelectedMapBoatId(null); setClusterModalBoats(null); }} style={navBtnStyle}><MapIcon size={22} /> Mapa</button>
         <button onClick={() => { setView('ranking'); setSelectedMapBoatId(null); setClusterModalBoats(null); }} style={navBtnStyle}><Trophy size={22} /> Ranking</button>
@@ -1131,6 +1153,32 @@ export default function App() {
               <select value={relayTimeout} onChange={(e) => axios.post(`${API_URL}/api/config`, { relayTimeout: e.target.value })} style={{ ...inputStyle, marginBottom: 0 }}>
                 {[1,2,3,4,5,10].map(n => <option key={n} value={n}>Relay GPS: {n} min</option>)}
               </select>
+            </div>
+
+            <div style={{ background: 'white', padding: '15px', borderRadius: '12px', marginBottom: '20px', border: '1px solid #e2e8f0' }}>
+              <label style={labelStyle}>Enviar Comunicado Global</label>
+              <div style={{ display: 'flex', gap: '8px' }}>
+                <input 
+                  placeholder="Digite o aviso para todos..." 
+                  value={broadcastInput} 
+                  onChange={e => setBroadcastInput(e.target.value)} 
+                  style={{ ...inputStyle, marginBottom: 0 }} 
+                />
+                <button 
+                  onClick={() => { axios.post(`${API_URL}/api/config`, { broadcast: broadcastInput }); setBroadcastInput(''); }} 
+                  style={{ background: '#1e3a8a', color: 'white', border: 'none', borderRadius: '10px', padding: '0 20px', fontWeight: 'bold' }}
+                >
+                  Enviar
+                </button>
+              </div>
+              {broadcast.message && (
+                <button 
+                  onClick={() => { axios.post(`${API_URL}/api/config`, { broadcast: '' }); }} 
+                  style={{ background: 'none', border: 'none', color: '#ef4444', fontSize: '11px', marginTop: '8px', fontWeight: 'bold' }}
+                >
+                  Remover comunicado atual
+                </button>
+              )}
             </div>
 
             <div style={{ background: 'white', padding: '15px', borderRadius: '12px', marginBottom: '20px', border: '1px solid #e2e8f0' }}>
