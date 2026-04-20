@@ -63,6 +63,10 @@ export default function App() {
   const [trackingBoatId, setTrackingBoatId] = useState(null);
   const [currentTime, setCurrentTime] = useState(Date.now());
   
+  // Controle Dinâmico de Intervalo de GPS
+  const [relayTimeout, setRelayTimeout] = useState(1);
+  const relayTimeoutRef = useRef(1);
+
   const wakeLockRef = useRef(null);
   const audioRef = useRef(null);
 
@@ -80,6 +84,12 @@ export default function App() {
 
   useEffect(() => {
     fetchBoats();
+    
+    socket.on('config_updated', (data) => {
+      setRelayTimeout(data.relayTimeout);
+      relayTimeoutRef.current = data.relayTimeout;
+    });
+
     socket.on('location_changed', (data) => {
       setBoats(prev => prev.map(b => b.id === data.boatId ? { ...b, ...data, last_updated: data.lastUpdated } : b));
     });
@@ -97,6 +107,7 @@ export default function App() {
       }
     });
     return () => {
+      socket.off('config_updated');
       socket.off('location_changed'); 
       socket.off('boat_updated'); 
       socket.off('boat_deleted');
@@ -181,7 +192,7 @@ export default function App() {
     navigator.geolocation.getCurrentPosition(
       (pos) => {
         socket.emit('update_location', { boatId: id, lat: pos.coords.latitude, lng: pos.coords.longitude });
-        if (isTracking) setTimeout(() => trackLocation(id), 60000);
+        if (isTracking) setTimeout(() => trackLocation(id), relayTimeoutRef.current * 60000);
       },
       (err) => { if (isTracking) setTimeout(() => trackLocation(id), 15000); },
       { enableHighAccuracy: true, timeout: 25000, maximumAge: 0 }
@@ -200,7 +211,6 @@ export default function App() {
   return (
     <div style={{ height: '100%', display: 'flex', flexDirection: 'column', background: '#f8fafc' }}>
       
-      {/* NAVBAR: Botão Admin Removido */}
       <nav style={{ background: '#1e3a8a', color: 'white', padding: '12px 10px', display: 'flex', justifyContent: 'space-around', zIndex: 1000, boxShadow: '0 2px 10px rgba(0,0,0,0.2)' }}>
         <button onClick={() => { setView('map'); setSelectedMapBoatId(null); }} style={navBtnStyle}><MapIcon size={22} /> Mapa</button>
         <button onClick={() => setView('track')} style={navBtnStyle}><Play size={22} /> Transmitir</button>
@@ -290,6 +300,9 @@ export default function App() {
                 <div style={{ animation: 'pulse 2s infinite', fontSize: '40px' }}>📡</div>
                 <h2 style={{ color: '#059669' }}>TRANSMITINDO</h2>
                 <p><strong>{boatName}</strong></p>
+                <div style={{ background: '#fef3c7', padding: '10px', borderRadius: '12px', fontSize: '12px', color: '#92400e', marginBottom: '20px' }}>
+                  Intervalo atual: {relayTimeout} min
+                </div>
                 <button onClick={() => stopTracking()} style={stopBtnStyle}>Encerrar</button>
               </div>
             )}
@@ -298,10 +311,29 @@ export default function App() {
 
         {view === 'admin' && (
           <div style={{ padding: '20px', overflowY: 'auto' }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
-              <h2 style={{ margin: 0 }}>Modo Administrador</h2>
-              <button onClick={() => setView('map')} style={{ background: '#475569', color: 'white', border: 'none', padding: '8px 15px', borderRadius: '8px' }}>Sair</button>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', marginBottom: '20px' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <h2 style={{ margin: 0 }}>Modo Administrador</h2>
+                <button onClick={() => setView('map')} style={{ background: '#475569', color: 'white', border: 'none', padding: '8px 15px', borderRadius: '8px' }}>Sair</button>
+              </div>
+              
+              <div style={{ background: '#fff', padding: '15px', borderRadius: '12px', boxShadow: '0 2px 5px rgba(0,0,0,0.05)', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                <div>
+                  <div style={{ fontWeight: 'bold', color: '#1e293b' }}>Intervalo de GPS (Global)</div>
+                  <div style={{ fontSize: '12px', color: '#64748b' }}>Aplica-se a todos os barcos em tempo real</div>
+                </div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                  <select 
+                    value={relayTimeout} 
+                    onChange={(e) => axios.post(`${API_URL}/api/config`, { relayTimeout: e.target.value })}
+                    style={{ padding: '8px 12px', borderRadius: '8px', border: '1px solid #cbd5e1', fontSize: '14px', fontWeight: 'bold' }}
+                  >
+                    {[1,2,3,4,5,6,7,8,9,10].map(n => <option key={n} value={n}>{n} min</option>)}
+                  </select>
+                </div>
+              </div>
             </div>
+
             {boats.map(b => (
               <div key={b.id} style={{ background: 'white', marginBottom: '15px', padding: '15px', borderRadius: '12px', boxShadow: '0 2px 5px rgba(0,0,0,0.02)' }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
