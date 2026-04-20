@@ -4,7 +4,7 @@ import { MapContainer, TileLayer, Marker, Popup, useMap, useMapEvents, Polyline,
 const { BaseLayer } = LayersControl;
 import L from 'leaflet';
 import axios from 'axios';
-import { Map as MapIcon, Play, RefreshCw, Ship, Anchor, Users, Navigation, Activity, LogOut, AlertTriangle, Trash2, UserMinus, X, Battery, Trophy } from 'lucide-react';
+import { Map as MapIcon, Play, RefreshCw, Ship, Anchor, Users, Navigation, Activity, LogOut, AlertTriangle, Trash2, UserMinus, X, Battery, Trophy, Download } from 'lucide-react';
 import { Capacitor } from '@capacitor/core';
 import { Geolocation } from '@capacitor/geolocation';
 import { Device } from '@capacitor/device';
@@ -1131,6 +1131,16 @@ export default function App() {
               <select value={relayTimeout} onChange={(e) => axios.post(`${API_URL}/api/config`, { relayTimeout: e.target.value })} style={{ ...inputStyle, marginBottom: 0 }}>
                 {[1,2,3,4,5,10].map(n => <option key={n} value={n}>Relay GPS: {n} min</option>)}
               </select>
+            </div>
+
+            <div style={{ background: 'white', padding: '15px', borderRadius: '12px', marginBottom: '20px', border: '1px solid #e2e8f0' }}>
+              <label style={labelStyle}>Relatórios</label>
+              <button 
+                onClick={() => { window.open(`${API_URL}/api/admin/export`, '_blank'); }} 
+                style={{ ...startBtnStyle, background: '#1e3a8a', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '10px' }}
+              >
+                <Download size={20} /> Exportar Resultados (CSV)
+              </button>
             </div>
 
             <h3 style={{ fontSize: '16px', marginBottom: '10px' }}>Monitoramento de Telemetria ({boats.length})</h3>

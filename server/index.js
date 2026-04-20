@@ -303,6 +303,39 @@ app.post('/api/admin/reset_all', async (req, res) => {
   }
 });
 
+// Exportar resultados consolidados em CSV
+app.get('/api/admin/export', async (req, res) => {
+  try {
+    const boatsRes = await pool.query('SELECT * FROM boats ORDER BY category, distance DESC');
+    const boats = boatsRes.rows;
+    
+    let csv = 'Posicao,Barco,Categoria,Nickname,Distancia_km,Ritmo_Medio,Status,Trechos_Info\n';
+    
+    for (let i = 0; i < boats.length; i++) {
+      const b = boats[i];
+      const splitsRes = await pool.query(
+        'SELECT exchange_index, start_time, end_time FROM exchange_logs WHERE boat_id = $1 ORDER BY exchange_index',
+        [b.id]
+      );
+      
+      const splitsInfo = splitsRes.rows.map(s => {
+        const start = new Date(s.start_time);
+        const end = s.end_time ? new Date(s.end_time) : new Date();
+        const durationMin = Math.round((end - start) / 60000);
+        return `T${s.exchange_index + 1}:${durationMin}min`;
+      }).join(' | ');
+
+      csv += `${i + 1},"${b.name}","${b.category}",${b.nickname},${b.distance.toFixed(2)},${b.speed || 0},${b.active ? 'Ativo' : 'Inativo'},"${splitsInfo}"\n`;
+    }
+
+    res.setHeader('Content-Type', 'text/csv');
+    res.setHeader('Content-Disposition', 'attachment; filename=resultados_volta_ao_lago.csv');
+    res.send(csv);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // Buscar logs de trechos de um barco
 app.get('/api/boats/:id/splits', async (req, res) => {
   try {
