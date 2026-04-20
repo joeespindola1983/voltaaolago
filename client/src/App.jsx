@@ -141,10 +141,12 @@ function MapEventHandler({ onMapClick }) {
 }
 
 export default function App() {
-  const [view, setView] = useState('map');
+  const [view, setView] = useState(() => localStorage.getItem('vtl_view') || 'map');
   const [boats, setBoats] = useState([]);
   const [selectedMapBoatId, setSelectedMapBoatId] = useState(null);
   const [clusterModalBoats, setClusterModalBoats] = useState(null);
+
+  useEffect(() => { localStorage.setItem('vtl_view', view); }, [view]);
   const [boatName, setBoatName] = useState('');
   const [category, setCategory] = useState('');
   const [boatType, setBoatType] = useState('');
@@ -158,12 +160,32 @@ export default function App() {
   const [selectedExchangeIndex, setSelectedExchangeIndex] = useState(0);
   const [crewInput, setCrewInput] = useState('');
   const [isTracking, setIsTracking] = useState(false);
-  const [trackingBoatId, setTrackingBoatId] = useState(null);
+  const [trackingBoatId, setTrackingBoatId] = useState(() => localStorage.getItem('vtl_tracking_id'));
+  const [isAdmin, setIsAdmin] = useState(() => localStorage.getItem('vtl_admin') === 'true');
+
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    if (params.get('u') === 'admin' && params.get('p') === 'lago2026') { 
+      setIsAdmin(true); 
+      localStorage.setItem('vtl_admin', 'true');
+      setView('admin'); 
+      window.history.replaceState({}, document.title, "/"); 
+    }
+  }, []);
+
+  useEffect(() => {
+    if (trackingBoatId) {
+      localStorage.setItem('vtl_tracking_id', trackingBoatId);
+    } else {
+      localStorage.removeItem('vtl_tracking_id');
+    }
+  }, [trackingBoatId]);
+
   const [lastSuccessfulUpdate, setLastSuccessfulUpdate] = useState(null);
   const [syncStatus, setSyncStatus] = useState('idle');
   const [nextSyncCountdown, setNextSyncCountdown] = useState(0);
   const isTrackingRef = useRef(false);
-  const trackingBoatIdRef = useRef(null);
+  const trackingBoatIdRef = useRef(trackingBoatId);
   const watchIdRef = useRef(null);
   const lastSentRef = useRef(0);
   const [currentTime, setCurrentTime] = useState(Date.now());
@@ -188,11 +210,6 @@ export default function App() {
   const relayTimeoutRef = useRef(1);
   const wakeLockRef = useRef(null);
   const audioRef = useRef(null);
-
-  useEffect(() => {
-    const params = new URLSearchParams(window.location.search);
-    if (params.get('u') === 'admin' && params.get('p') === 'lago2026') { setView('admin'); window.history.replaceState({}, document.title, "/"); }
-  }, []);
 
   useEffect(() => {
     const timer = setInterval(() => setCurrentTime(Date.now()), 30000);
@@ -233,6 +250,18 @@ export default function App() {
     return () => { socket.off('config_updated'); socket.off('location_changed'); socket.off('boat_updated'); socket.off('boat_deleted'); socket.off('control_taken'); };
   }, []);
 
+  // Resume tracking automatically if boat data is loaded and tracking session exists
+  useEffect(() => {
+    if (trackingBoatId && boats.length > 0 && !isTracking) {
+      const b = boats.find(x => Number(x.id) === Number(trackingBoatId));
+      if (b) {
+        setBoatName(b.name); setBoatType(b.type); setNickname(b.nickname);
+        setIsTracking(true); isTrackingRef.current = true;
+        trackLocation(b.id);
+      }
+    }
+  }, [boats, trackingBoatId]);
+
   const fetchBoats = async () => {
     try { const res = await axios.get(`${API_URL}/api/boats`); setBoats(res.data); } catch (err) { console.error('Erro API:', err); }
   };
@@ -264,6 +293,7 @@ export default function App() {
     isTrackingRef.current = false;
     setTrackingBoatId(null);
     trackingBoatIdRef.current = null;
+    localStorage.removeItem('vtl_tracking_id');
     setSyncStatus('idle');
     if (watchIdRef.current) navigator.geolocation.clearWatch(watchIdRef.current);
     if (wakeLockRef.current) wakeLockRef.current.release();
@@ -579,12 +609,22 @@ export default function App() {
               </div>
             ) : (
               <>
-                <div style={{ background: '#ecfdf5', padding: '15px 20px', borderBottom: '2px solid #10b981', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                  <div>
-                    <div style={{ color: '#059669', fontWeight: 'bold', fontSize: '12px' }}>📡 TRANSMITINDO</div>
-                    <div style={{ fontSize: '18px', fontWeight: 'bold' }}>{boatName}</div>
+                <div style={{ background: '#ecfdf5', padding: '15px 20px', borderBottom: '2px solid #10b981' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '10px' }}>
+                    <div>
+                      <div style={{ color: '#059669', fontWeight: 'bold', fontSize: '12px' }}>📡 TRANSMITINDO</div>
+                      <div style={{ fontSize: '18px', fontWeight: 'bold' }}>{boatName}</div>
+                    </div>
+                    <button onClick={() => stopTracking()} style={{ background: '#ef4444', color: 'white', border: 'none', padding: '8px 15px', borderRadius: '10px', fontWeight: 'bold' }}>PARAR</button>
                   </div>
-                  <button onClick={() => stopTracking()} style={{ background: '#ef4444', color: 'white', border: 'none', padding: '8px 15px', borderRadius: '10px', fontWeight: 'bold' }}>PARAR</button>
+                  <div style={{ background: 'rgba(16,185,129,0.1)', padding: '10px', borderRadius: '12px', border: '1px solid rgba(16,185,129,0.2)' }}>
+                    <div style={{ fontSize: '11px', color: '#065f46', fontWeight: 'bold', marginBottom: '4px', display: 'flex', alignItems: 'center', gap: '5px' }}>
+                      <Users size={14}/> EQUIPE NO TRECHO {selectedExchangeIndex + 1}:
+                    </div>
+                    <div style={{ fontSize: '13px', color: '#047857' }}>
+                      {exchanges[selectedExchangeIndex]?.join(', ') || 'Nenhum atleta escalado'}
+                    </div>
+                  </div>
                 </div>
                 <div style={{ flex: selectedMapBoatId ? '0 0 55%' : '1 1 100%', position: 'relative', transition: 'all 0.3s ease' }}>
                   <MapContainer center={[-15.7942, -47.8822]} zoom={13} style={{ height: '100%', width: '100%' }}>
