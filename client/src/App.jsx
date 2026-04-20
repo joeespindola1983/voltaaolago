@@ -3,7 +3,7 @@ import { io } from 'socket.io-client';
 import { MapContainer, TileLayer, Marker, Popup, useMap, useMapEvents } from 'react-leaflet';
 import L from 'leaflet';
 import axios from 'axios';
-import { Map as MapIcon, Play, RefreshCw, Ship, Anchor, Users, Navigation, Activity, LogOut, AlertTriangle, Trash2, UserMinus } from 'lucide-react';
+import { Map as MapIcon, Play, RefreshCw, Ship, Anchor, Users, Navigation, Activity, LogOut, AlertTriangle, Trash2, UserMinus, X } from 'lucide-react';
 
 // --- CONFIGURAÇÕES ---
 const BACKEND_URL = 'https://voltaaolago-backend.onrender.com';
@@ -20,7 +20,7 @@ const boatIcon = (type, status = 'online', isMe = false) => {
   const colors = { online: '#2563eb', warning: '#f59e0b', lost: '#64748b' };
   const color = isMe ? '#10b981' : (colors[status] || colors.online);
   return L.divIcon({
-    html: `<div style="background-color: ${color}; border-radius: 50%; width: 40px; height: 40px; display: flex; align-items: center; justify-content: center; border: 3px solid white; box-shadow: 0 4px 10px rgba(0,0,0,0.4); transition: all 0.3s ease; ${isMe ? 'outline: 4px solid rgba(16,185,129,0.3);' : ''}">
+    html: `<div style="background-color: ${color}; border-radius: 50%; width: 40px; height: 40px; display: flex; align-items: center; justify-content: center; border: 3px solid white; box-shadow: 0 4px 10px rgba(0,0,0,0.4);">
             <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
               <path d="M2 12s3-2 10-2 10 2 10 2l-2 8H4l-2-8Z"/><path d="M12 10V2l4 4-4 4Z"/>
             </svg>
@@ -34,29 +34,14 @@ const clusterIcon = (count) => L.divIcon({
   className: '', iconSize: [44, 44], iconAnchor: [22, 22]
 });
 
-// Camada Inteligente de Barcos (Lida com Clustering e Separação Dinâmica)
-function BoatLayer({ boats, trackingBoatId, selectedMapBoatId, setSelectedMapBoatId, expandedClusterId, setExpandedClusterId, currentTime, setView }) {
+function BoatLayer({ boats, trackingBoatId, setSelectedMapBoatId, setClusterModalBoats, currentTime }) {
   const map = useMap();
   const [zoom, setZoom] = useState(map.getZoom());
-  
-  useMapEvents({
-    zoomend: () => setZoom(map.getZoom()),
-  });
+  useMapEvents({ zoomend: () => setZoom(map.getZoom()) });
 
-  const getBoatStatus = (lastUpdated) => {
-    if (!lastUpdated) return 'lost';
-    const diff = (currentTime - new Date(lastUpdated).getTime()) / 60000;
-    if (diff < 5) return 'online';
-    if (diff < 10) return 'warning';
-    return 'lost';
-  };
-
-  // Lógica de agrupamento baseada na distância visual (pixels) aproximada
   const groups = [];
   const processedIds = new Set();
   const active = boats.filter(b => b.lat && b.lng && (currentTime - new Date(b.last_updated).getTime()) < 3600000);
-
-  // Distância de agrupamento diminui conforme o zoom aumenta
   const clusterThreshold = 0.0004 * Math.pow(2, 16 - zoom);
 
   active.forEach(b => {
@@ -74,33 +59,16 @@ function BoatLayer({ boats, trackingBoatId, selectedMapBoatId, setSelectedMapBoa
     <>
       {groups.map(group => {
         const { anchor, members } = group;
-        const isExpanded = expandedClusterId === anchor.id;
-
-        if (members.length === 1 || isExpanded) {
-          return members.map((boat, index) => {
-            // Offset dinâmico: mais espaço quando o zoom está mais longe
-            const spacing = 0.0006 * Math.pow(2, 16 - zoom);
-            const lngOffset = isExpanded ? (index * spacing) - ((members.length - 1) * spacing / 2) : 0;
-            
-            return (
-              <Marker 
-                key={boat.id} 
-                position={[boat.lat, boat.lng + lngOffset]} 
-                icon={boatIcon(boat.type, getBoatStatus(boat.last_updated), boat.id === trackingBoatId)}
-                eventHandlers={{ click: () => { setSelectedMapBoatId(boat.id); setExpandedClusterId(null); if (setView) setView('map'); } }}
-              >
-                <Popup><strong>{boat.name}</strong> {boat.id === trackingBoatId && '(Você)'}</Popup>
-              </Marker>
-            );
-          });
+        if (members.length === 1) {
+          const boat = members[0];
+          const diff = (currentTime - new Date(boat.last_updated).getTime()) / 60000;
+          const status = diff < 5 ? 'online' : (diff < 10 ? 'warning' : 'lost');
+          return (
+            <Marker key={boat.id} position={[boat.lat, boat.lng]} icon={boatIcon(boat.type, status, boat.id === trackingBoatId)} eventHandlers={{ click: () => setSelectedMapBoatId(boat.id) }} />
+          );
         }
         return (
-          <Marker 
-            key={`cluster-${anchor.id}`} 
-            position={[anchor.lat, anchor.lng]} 
-            icon={clusterIcon(members.length)} 
-            eventHandlers={{ click: () => setExpandedClusterId(anchor.id) }} 
-          />
+          <Marker key={`cluster-${anchor.id}`} position={[anchor.lat, anchor.lng]} icon={clusterIcon(members.length)} eventHandlers={{ click: () => setClusterModalBoats(members) }} />
         );
       })}
     </>
@@ -113,15 +81,13 @@ function MapAutoZoom({ boats, selectedMapBoatId, focusBoatId }) {
     const focusId = focusBoatId || selectedMapBoatId;
     if (focusId) {
       const b = boats.find(x => x.id === focusId);
-      if (b && b.lat && b.lng) {
-        map.setView([b.lat, b.lng], 16, { animate: true });
-        return;
+      if (b && b.lat && b.lng) map.setView([b.lat, b.lng], 16, { animate: true });
+    } else {
+      const activeBoats = boats.filter(b => b.lat && b.lng);
+      if (activeBoats.length > 0) {
+        const bounds = L.latLngBounds(activeBoats.map(b => [b.lat, b.lng]));
+        map.fitBounds(bounds, { padding: [80, 80], maxZoom: 15 });
       }
-    }
-    const activeBoats = boats.filter(b => b.lat && b.lng);
-    if (activeBoats.length > 0 && !focusId) {
-      const bounds = L.latLngBounds(activeBoats.map(b => [b.lat, b.lng]));
-      map.fitBounds(bounds, { padding: [80, 80], maxZoom: 15 });
     }
   }, [boats, map, selectedMapBoatId, focusBoatId]);
   return null;
@@ -131,7 +97,7 @@ export default function App() {
   const [view, setView] = useState('map');
   const [boats, setBoats] = useState([]);
   const [selectedMapBoatId, setSelectedMapBoatId] = useState(null);
-  const [expandedClusterId, setExpandedClusterId] = useState(null);
+  const [clusterModalBoats, setClusterModalBoats] = useState(null);
   const [boatName, setBoatName] = useState('');
   const [category, setCategory] = useState('');
   const [boatType, setBoatType] = useState('');
@@ -141,7 +107,6 @@ export default function App() {
   const [currentTime, setCurrentTime] = useState(Date.now());
   const [relayTimeout, setRelayTimeout] = useState(1);
   const relayTimeoutRef = useRef(1);
-
   const wakeLockRef = useRef(null);
   const audioRef = useRef(null);
 
@@ -174,11 +139,8 @@ export default function App() {
     socket.on('boat_deleted', (data) => {
       setBoats(prev => prev.filter(b => b.id !== data.id));
       if (selectedMapBoatId === data.id) setSelectedMapBoatId(null);
-      if (trackingBoatId === data.id) stopTracking();
     });
-    socket.on('control_taken', (data) => {
-      if (isTracking && trackingBoatId === data.boatId) { alert("⚠️ Controle assumido por outra equipe!"); stopTracking(true); }
-    });
+    socket.on('control_taken', (data) => { if (isTracking && trackingBoatId === data.boatId) { alert("Controle assumido!"); stopTracking(true); } });
     return () => { socket.off('config_updated'); socket.off('location_changed'); socket.off('boat_updated'); socket.off('boat_deleted'); socket.off('control_taken'); };
   }, [isTracking, trackingBoatId, selectedMapBoatId]);
 
@@ -190,12 +152,8 @@ export default function App() {
     if (!boatName || !boatType || !crewInput) return alert('Preencha tudo!');
     try {
       const res = await axios.post(`${API_URL}/api/boats`, { name: boatName, type: boatType, current_crew: crewInput.split(',').map(s => s.trim()) });
-      await activateHardwareGPS(res.data.id);
+      activateHardwareGPS(res.data.id);
     } catch (err) { alert('Erro ao criar.'); }
-  };
-
-  const deleteBoat = async (id) => {
-    if (window.confirm('Remover barco?')) { try { await axios.delete(`${API_URL}/api/boats/${id}`); } catch (err) { alert('Erro.'); } }
   };
 
   const activateHardwareGPS = async (id) => {
@@ -203,8 +161,7 @@ export default function App() {
       if ('wakeLock' in navigator) wakeLockRef.current = await navigator.wakeLock.request('screen');
       const audio = new Audio('data:audio/wav;base64,UklGRigAAABXQVZFZm10IBIAAAABAAEARKwAAIhYAQACABAAAABkYXRhAgAAAAEA');
       audio.loop = true; audio.play().catch(() => {});
-      audioRef.current = audio;
-      setTrackingBoatId(id); setIsTracking(true); trackLocation(id);
+      audioRef.current = audio; setTrackingBoatId(id); setIsTracking(true); trackLocation(id);
     } catch (err) { alert('Erro GPS.'); }
   };
 
@@ -227,36 +184,43 @@ export default function App() {
     );
   };
 
-  const renderMap = (focusId = null) => (
-    <MapContainer center={[-15.7942, -47.8822]} zoom={13} style={{ height: '100%', width: '100%' }}>
-      <TileLayer url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png" />
-      <MapAutoZoom boats={boats} selectedMapBoatId={selectedMapBoatId} focusBoatId={focusId} />
-      <BoatLayer 
-        boats={boats} 
-        trackingBoatId={trackingBoatId} 
-        selectedMapBoatId={selectedMapBoatId} 
-        setSelectedMapBoatId={setSelectedMapBoatId}
-        expandedClusterId={expandedClusterId}
-        setExpandedClusterId={setExpandedClusterId}
-        currentTime={currentTime}
-        setView={setView}
-      />
-    </MapContainer>
-  );
-
   return (
     <div style={{ height: '100%', display: 'flex', flexDirection: 'column', background: '#f8fafc' }}>
-      
       <nav style={{ background: '#1e3a8a', color: 'white', padding: '12px 10px', display: 'flex', justifyContent: 'space-around', zIndex: 1000, boxShadow: '0 2px 10px rgba(0,0,0,0.2)' }}>
-        <button onClick={() => { setView('map'); setSelectedMapBoatId(null); setExpandedClusterId(null); }} style={navBtnStyle}><MapIcon size={22} /> Mapa</button>
+        <button onClick={() => { setView('map'); setSelectedMapBoatId(null); setClusterModalBoats(null); }} style={navBtnStyle}><MapIcon size={22} /> Mapa</button>
         <button onClick={() => setView('track')} style={navBtnStyle}><Play size={22} /> Transmitir</button>
       </nav>
 
       <div style={{ flex: 1, position: 'relative', display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
-        
         {view === 'map' && (
           <>
-            <div style={{ flex: selectedMapBoatId ? '0 0 55%' : '1 1 100%', transition: 'all 0.3s ease' }}>{renderMap()}</div>
+            <div style={{ flex: selectedMapBoatId ? '0 0 55%' : '1 1 100%', transition: 'all 0.3s ease' }}>
+              <MapContainer center={[-15.7942, -47.8822]} zoom={13} style={{ height: '100%', width: '100%' }}>
+                <TileLayer url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png" />
+                <MapAutoZoom boats={boats} selectedMapBoatId={selectedMapBoatId} focusBoatId={isTracking ? trackingBoatId : null} />
+                <BoatLayer boats={boats} trackingBoatId={trackingBoatId} setSelectedMapBoatId={setSelectedMapBoatId} setClusterModalBoats={setClusterModalBoats} currentTime={currentTime} />
+              </MapContainer>
+            </div>
+            
+            {/* Modal de Barcos Sobrepostos */}
+            {clusterModalBoats && (
+              <div style={modalOverlayStyle}>
+                <div style={modalContentStyle}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '15px' }}>
+                    <h3 style={{ margin: 0 }}>Barcos nesta área</h3>
+                    <button onClick={() => setClusterModalBoats(null)} style={{ background: 'none', border: 'none' }}><X size={24} /></button>
+                  </div>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                    {clusterModalBoats.map(b => (
+                      <button key={b.id} onClick={() => { setSelectedMapBoatId(b.id); setClusterModalBoats(null); }} style={modalButtonStyle}>
+                        <strong>{b.name}</strong> ({b.type})
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              </div>
+            )}
+
             {selectedMapBoatId && boats.find(b => b.id === selectedMapBoatId) && (
               <div style={{ flex: '1 1 45%', background: 'white', borderTop: '2px solid #e2e8f0', padding: '15px 20px', overflowY: 'auto' }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '10px' }}>
@@ -271,7 +235,7 @@ export default function App() {
                   <div style={sectionTitleStyle}><Users size={16} /> Tripulação</div>
                   <div style={crewBoxStyle}>{boats.find(b => b.id === selectedMapBoatId).current_crew?.join(', ') || 'Ninguém'}</div>
                 </div>
-                <button onClick={() => { setView('track'); setBoatName(boats.find(b => b.id === selectedMapBoatId).name); }} style={{ ...startBtnStyle, marginTop: '10px', background: '#0f172a' }}>Assumir Este Barco</button>
+                <button onClick={() => { setView('track'); setBoatName(boats.find(b => b.id === selectedMapBoatId).name); }} style={{ ...startBtnStyle, marginTop: '10px', background: '#0f172a' }}>Assumir Barco</button>
               </div>
             )}
           </>
@@ -310,12 +274,18 @@ export default function App() {
               <>
                 <div style={{ background: '#ecfdf5', padding: '15px 20px', borderBottom: '2px solid #10b981', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                   <div>
-                    <div style={{ color: '#059669', fontWeight: 'bold', display: 'flex', alignItems: 'center', gap: '5px' }}><div style={{ width: '8px', height: '8px', background: '#10b981', borderRadius: '50%', animation: 'pulse 2s infinite' }}></div> TRANSMITINDO</div>
+                    <div style={{ color: '#059669', fontWeight: 'bold' }}>📡 TRANSMITINDO</div>
                     <div style={{ fontSize: '18px', fontWeight: 'bold' }}>{boatName}</div>
                   </div>
-                  <button onClick={() => stopTracking()} style={{ background: '#ef4444', color: 'white', border: 'none', padding: '8px 15px', borderRadius: '10px', fontWeight: 'bold', fontSize: '13px' }}>PARAR</button>
+                  <button onClick={() => stopTracking()} style={{ background: '#ef4444', color: 'white', border: 'none', padding: '8px 15px', borderRadius: '10px', fontWeight: 'bold' }}>PARAR</button>
                 </div>
-                <div style={{ flex: 1, position: 'relative' }}>{renderMap(trackingBoatId)}</div>
+                <div style={{ flex: 1, position: 'relative' }}>
+                  <MapContainer center={[-15.7942, -47.8822]} zoom={13} style={{ height: '100%', width: '100%' }}>
+                    <TileLayer url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png" />
+                    <MapAutoZoom boats={boats} focusBoatId={trackingBoatId} />
+                    <BoatLayer boats={boats} trackingBoatId={trackingBoatId} setSelectedMapBoatId={() => {}} setClusterModalBoats={() => {}} currentTime={currentTime} />
+                  </MapContainer>
+                </div>
               </>
             )}
           </div>
@@ -325,21 +295,20 @@ export default function App() {
           <div style={{ padding: '20px', overflowY: 'auto' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
               <h2 style={{ margin: 0 }}>Admin</h2>
-              <div style={{ display: 'flex', gap: '10px' }}>
-                <select value={relayTimeout} onChange={(e) => axios.post(`${API_URL}/api/config`, { relayTimeout: e.target.value })} style={{ padding: '5px' }}>{[1,2,3,4,5,10].map(n => <option key={n} value={n}>{n} min</option>)}</select>
-                <button onClick={() => setView('map')} style={{ background: '#475569', color: 'white', border: 'none', padding: '8px 15px', borderRadius: '8px' }}>Sair</button>
-              </div>
+              <button onClick={() => setView('map')} style={{ background: '#475569', color: 'white', border: 'none', padding: '8px 15px', borderRadius: '8px' }}>Sair</button>
             </div>
+            <select value={relayTimeout} onChange={(e) => axios.post(`${API_URL}/api/config`, { relayTimeout: e.target.value })} style={{ padding: '10px', width: '100%', borderRadius: '10px', marginBottom: '20px' }}>
+              {[1,2,3,4,5,10].map(n => <option key={n} value={n}>Relay GPS: {n} min</option>)}
+            </select>
             {boats.map(b => (
               <div key={b.id} style={{ background: 'white', marginBottom: '10px', padding: '15px', borderRadius: '12px', boxShadow: '0 2px 5px rgba(0,0,0,0.02)', display: 'flex', justifyContent: 'space-between' }}>
                 <div><strong>{b.name}</strong><br/><span style={{ fontSize: '12px', color: '#64748b' }}>{b.distance?.toFixed(2)} km</span></div>
-                <button onClick={() => deleteBoat(b.id)} style={{ color: '#ef4444', border: 'none', background: 'none' }}><Trash2 size={18} /></button>
+                <button onClick={() => { if (window.confirm('Excluir?')) axios.delete(`${API_URL}/api/boats/${b.id}`) }} style={{ color: '#ef4444', border: 'none', background: 'none' }}><Trash2 size={18} /></button>
               </div>
             ))}
           </div>
         )}
       </div>
-      <style>{`@keyframes pulse { 0% { opacity: 1; } 50% { opacity: 0.4; } 100% { opacity: 1; } }`}</style>
     </div>
   );
 }
@@ -352,3 +321,6 @@ const infoCardStyle = { display: 'flex', alignItems: 'center', gap: '10px', back
 const infoLabel = { fontSize: '10px', color: '#64748b', textTransform: 'uppercase' };
 const sectionTitleStyle = { display: 'flex', alignItems: 'center', gap: '8px', color: '#475569', fontWeight: 'bold', marginBottom: '5px', fontSize: '14px' };
 const crewBoxStyle = { background: '#f1f5f9', padding: '10px', borderRadius: '8px', fontSize: '14px' };
+const modalOverlayStyle = { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(0,0,0,0.5)', zIndex: 2000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '20px' };
+const modalContentStyle = { background: 'white', borderRadius: '20px', padding: '20px', width: '100%', maxWidth: '400px', boxShadow: '0 10px 25px rgba(0,0,0,0.2)' };
+const modalButtonStyle = { background: '#f1f5f9', border: 'none', padding: '15px', borderRadius: '12px', textAlign: 'left', fontSize: '16px', cursor: 'pointer', color: '#1e3a8a' };
