@@ -257,6 +257,10 @@ export default function App() {
       if (b) {
         setBoatName(b.name); setBoatType(b.type); setNickname(b.nickname);
         setIsTracking(true); isTrackingRef.current = true;
+        // Tenta reativar o WakeLock se disponível
+        if ('wakeLock' in navigator) {
+          navigator.wakeLock.request('screen').then(lock => { wakeLockRef.current = lock; }).catch(() => {});
+        }
         trackLocation(b.id);
       }
     }
@@ -406,24 +410,41 @@ export default function App() {
                   <button onClick={() => { setIsRegistering(true); setEditingBoatId(null); setNickname(''); setBoatName(''); setPin(''); setAthletes([]); setExchanges([]); setBoatColor('#2563eb'); }} style={{ ...startBtnStyle, width: 'auto', padding: '10px 20px' }}>+ Novo Barco</button>
                 </div>
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
-                  {boats.map(b => (
-                    <div key={b.id} style={{ background: 'white', padding: '15px', borderRadius: '15px', boxShadow: '0 2px 8px rgba(0,0,0,0.05)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-                        <div style={{ width: '12px', height: '12px', borderRadius: '50%', background: b.color || '#2563eb' }} />
-                        <div>
-                          <div style={{ fontWeight: 'bold', color: '#1e3a8a' }}>{b.name}</div>
-                          <div style={{ fontSize: '12px', color: '#64748b' }}>@{b.nickname} • {b.type}</div>
-                          <div style={{ fontSize: '11px', color: '#94a3b8', marginTop: '4px' }}>{b.athletes?.length || 0} atletas • {b.exchanges?.length || 0} trechos</div>
+                  {boats.map(b => {
+                    const diff = (currentTime - new Date(b.last_updated).getTime()) / 60000;
+                    const isOnline = b.lat && b.lng && diff < 5;
+                    return (
+                      <div key={b.id} style={{ background: 'white', padding: '15px', borderRadius: '15px', boxShadow: '0 2px 8px rgba(0,0,0,0.05)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                          <div style={{ position: 'relative' }}>
+                            <div style={{ width: '12px', height: '12px', borderRadius: '50%', background: b.color || '#2563eb' }} />
+                            {isOnline && <div style={{ position: 'absolute', top: -2, right: -2, width: '6px', height: '6px', borderRadius: '50%', background: '#10b981', border: '1px solid white' }} />}
+                          </div>
+                          <div>
+                            <div style={{ fontWeight: 'bold', color: '#1e3a8a', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                              {b.name} 
+                              {isOnline && <span style={{ fontSize: '9px', background: '#ecfdf5', color: '#059669', padding: '1px 4px', borderRadius: '4px' }}>LIVE</span>}
+                            </div>
+                            <div style={{ fontSize: '12px', color: '#64748b' }}>@{b.nickname} • {b.type}</div>
+                          </div>
+                        </div>
+                        <div style={{ display: 'flex', gap: '8px' }}>
+                          <button onClick={() => {
+                            const text = `Acesso ao barco *${b.name}*:\nNickname: *@${b.nickname}*\nSenha: *${b.pin}*\nLink: ${window.location.origin}`;
+                            navigator.clipboard.writeText(text).then(() => alert('Dados de acesso copiados! Envie para sua equipe.'));
+                          }} style={{ background: '#f8fafc', border: '1px solid #e2e8f0', padding: '10px', borderRadius: '10px', cursor: 'pointer' }}>
+                            <RefreshCw size={16} color="#64748b" />
+                          </button>
+                          <button onClick={() => {
+                            const p = prompt('Digite a SENHA de 4 números:');
+                            if (p === b.pin) {
+                              setEditingBoatId(b.id); setBoatName(b.name); setNickname(b.nickname); setPin(b.pin); setAthletes(b.athletes || []); setExchanges(b.exchanges || []); setBoatType(b.type); setBoatColor(b.color || '#2563eb'); setIsRegistering(true);
+                            } else if (p !== null) alert('SENHA incorreta!');
+                          }} style={{ background: '#f1f5f9', border: 'none', padding: '10px 15px', borderRadius: '10px', fontSize: '12px', fontWeight: 'bold' }}>Gerenciar</button>
                         </div>
                       </div>
-                      <button onClick={() => {
-                        const p = prompt('Digite a SENHA de 4 números:');
-                        if (p === b.pin) {
-                          setEditingBoatId(b.id); setBoatName(b.name); setNickname(b.nickname); setPin(b.pin); setAthletes(b.athletes || []); setExchanges(b.exchanges || []); setBoatType(b.type); setBoatColor(b.color || '#2563eb'); setIsRegistering(true);
-                        } else if (p !== null) alert('SENHA incorreta!');
-                      }} style={{ background: '#f1f5f9', border: 'none', padding: '10px 15px', borderRadius: '10px', fontSize: '12px', fontWeight: 'bold' }}>Gerenciar</button>
-                    </div>
-                  ))}
+                    );
+                  })}
                 </div>
               </>
             ) : (
@@ -662,7 +683,10 @@ export default function App() {
           <div style={{ padding: '20px', overflowY: 'auto' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
               <h2 style={{ margin: 0 }}>Painel de Controle Admin</h2>
-              <button onClick={() => setView('map')} style={{ background: '#475569', color: 'white', border: 'none', padding: '8px 15px', borderRadius: '8px' }}>Sair</button>
+              <div style={{ display: 'flex', gap: '10px' }}>
+                <button onClick={() => { setIsAdmin(false); localStorage.removeItem('vtl_admin'); setView('map'); }} style={{ background: '#ef4444', color: 'white', border: 'none', padding: '8px 15px', borderRadius: '8px' }}>Logoff</button>
+                <button onClick={() => setView('map')} style={{ background: '#475569', color: 'white', border: 'none', padding: '8px 15px', borderRadius: '8px' }}>Sair</button>
+              </div>
             </div>
             
             <div style={{ background: 'white', padding: '15px', borderRadius: '12px', marginBottom: '20px', border: '1px solid #e2e8f0' }}>
