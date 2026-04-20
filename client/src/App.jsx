@@ -297,15 +297,8 @@ export default function App() {
             ) : (
               <>
                 <div style={{ background: '#ecfdf5', padding: '15px 20px', borderBottom: '2px solid #10b981', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                  <div style={{ flex: 1 }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                      <div style={{ color: '#059669', fontWeight: 'bold', fontSize: '12px' }}>📡 TRANSMITINDO</div>
-                      {lastSuccessfulUpdate && (
-                        <div style={{ background: '#10b981', color: 'white', padding: '2px 8px', borderRadius: '12px', fontSize: '10px', fontWeight: 'bold' }}>
-                          SYNC OK: {Math.floor((currentTime - lastSuccessfulUpdate) / 60000)} min atrás
-                        </div>
-                      )}
-                    </div>
+                  <div>
+                    <div style={{ color: '#059669', fontWeight: 'bold', fontSize: '12px' }}>📡 TRANSMITINDO</div>
                     <div style={{ fontSize: '18px', fontWeight: 'bold' }}>{boatName}</div>
                   </div>
                   <button onClick={() => stopTracking()} style={{ background: '#ef4444', color: 'white', border: 'none', padding: '8px 15px', borderRadius: '10px', fontWeight: 'bold' }}>PARAR</button>
@@ -316,6 +309,16 @@ export default function App() {
                     <MapAutoZoom boats={boats} selectedMapBoatId={selectedMapBoatId} focusBoatId={trackingBoatId} />
                     <BoatLayer boats={boats} trackingBoatId={trackingBoatId} setSelectedMapBoatId={setSelectedMapBoatId} setClusterModalBoats={setClusterModalBoats} currentTime={currentTime} />
                   </MapContainer>
+
+                  {/* Indicador de Sincronização Flutuante */}
+                  <div style={{ position: 'absolute', bottom: '20px', left: '50%', transform: 'translateX(-50%)', zIndex: 1000, background: 'rgba(255,255,255,0.95)', padding: '10px 20px', borderRadius: '30px', boxShadow: '0 4px 15px rgba(0,0,0,0.15)', display: 'flex', alignItems: 'center', gap: '10px', border: '1px solid #e2e8f0', whiteSpace: 'nowrap' }}>
+                    <div style={{ width: '12px', height: '12px', borderRadius: '50%', background: lastSuccessfulUpdate ? '#10b981' : '#f59e0b', animation: lastSuccessfulUpdate ? 'none' : 'pulse 1.5s infinite' }} />
+                    <span style={{ fontSize: '14px', fontWeight: 'bold', color: '#1e293b' }}>
+                      {lastSuccessfulUpdate 
+                        ? `Sincronizado: ${Math.floor((currentTime - lastSuccessfulUpdate) / 60000)} min atrás` 
+                        : 'Aguardando sinal GPS...'}
+                    </span>
+                  </div>
                 </div>
                 {selectedMapBoatId && boats.find(b => Number(b.id) === Number(selectedMapBoatId)) && (
                   <BoatDetails boat={boats.find(b => Number(b.id) === Number(selectedMapBoatId))} onClose={() => setSelectedMapBoatId(null)} />
