@@ -3,7 +3,7 @@ import { io } from 'socket.io-client';
 import { MapContainer, TileLayer, Marker, Polyline, useMap, useMapEvents } from 'react-leaflet';
 import L from 'leaflet';
 import axios from 'axios';
-import { Map as MapIcon, Trophy, Ship, Play, Download, X, Battery, LogOut, Activity, Navigation, Timer, Maximize, Search, ChevronRight, WifiOff, Clock } from 'lucide-react';
+import { Map as MapIcon, Trophy, Ship, Play, Download, X, Battery, LogOut, Activity, Navigation, Timer, Maximize, Search, ChevronRight, WifiOff, Clock, Sun, Settings, ArrowRight } from 'lucide-react';
 import { Capacitor } from '@capacitor/core';
 import { Geolocation } from '@capacitor/geolocation';
 import { Device } from '@capacitor/device';
@@ -11,20 +11,18 @@ import { NativeSettings, AndroidSettings, IOSSettings } from 'capacitor-native-s
 
 import 'leaflet/dist/leaflet.css';
 
-// --- CONFIGURAÇÕES ---
+// --- 1. CONFIGURAÇÕES ---
 const isApp = Capacitor.isNativePlatform();
 const BACKEND_URL = 'https://voltaaolago-backend.onrender.com';
 const API_URL = BACKEND_URL; 
 const socket = io(API_URL);
-
-const VERSION = "v2.2.9 (Slim)";
+const VERSION = "v2.4.7 (Stable)";
 const CATEGORIES = ['Geral', 'Estreante', 'Open', '40+', '50+', '60/70+'];
 const CLIENT_ID = Math.random().toString(36).substring(7);
 
-// --- ESTILOS ---
+// --- 2. ESTILOS ---
 const navBtnStyle = { background: 'none', border: 'none', color: 'white', display: 'flex', flexDirection: 'column', alignItems: 'center', fontSize: '10px', gap: '2px' };
 const btnStyle = { width: '100%', padding: '16px', background: '#1e3a8a', color: 'white', border: 'none', borderRadius: '12px', fontWeight: 'bold', fontSize: '16px', cursor: 'pointer' };
-const inputStyle = { width: '100%', padding: '16px', marginBottom: '15px', borderRadius: '12px', border: '1px solid #ddd', boxSizing: 'border-box' };
 const cardStyle = { background: 'white', padding: '25px', borderRadius: '25px', boxShadow: '0 4px 15px rgba(0,0,0,0.05)' };
 const rankCardStyle = { background: 'white', padding: '15px', borderRadius: '15px', display: 'flex', alignItems: 'center', gap: '15px', marginBottom: '10px', border: '1px solid #f1f5f9', cursor: 'pointer' };
 const catBtnStyle = { padding: '8px 15px', borderRadius: '20px', border: 'none', fontSize: '12px', fontWeight: 'bold', whiteSpace: 'nowrap', cursor: 'pointer' };
@@ -34,7 +32,14 @@ const modalOverlayStyle = { position: 'absolute', top: 0, left: 0, right: 0, bot
 const modalContentStyle = { background: 'white', borderRadius: '20px', padding: '20px', width: '100%', maxWidth: '400px', boxShadow: '0 10px 25px rgba(0,0,0,0.2)' };
 const modalButtonStyle = { background: '#f1f5f9', border: 'none', padding: '15px', borderRadius: '12px', textAlign: 'left', fontSize: '16px', cursor: 'pointer', color: '#1e3a8a', display: 'flex', alignItems: 'center', justifyContent: 'space-between' };
 
-// --- COMPONENTES AUXILIARES ---
+// --- 3. FUNÇÕES UTILITÁRIAS (DEVEM VIR ANTES DOS COMPONENTES) ---
+const calculatePace = (speedKmh) => {
+  if (!speedKmh || speedKmh < 0.5) return '--:--';
+  const paceDecimal = 60 / speedKmh;
+  const mins = Math.floor(paceDecimal);
+  const secs = Math.round((paceDecimal - mins) * 60);
+  return `${mins}:${secs.toString().padStart(2, '0')}`;
+};
 
 const boatIcon = (name, isSelected = false, color = '#2563eb', heading = 0, isLeader = false) => {
   const size = 42;
@@ -55,15 +60,32 @@ const clusterIcon = (count) => L.divIcon({
   className: '', iconSize: [44, 44], iconAnchor: [22, 22]
 });
 
-const calculatePace = (speedKmh) => {
-  if (!speedKmh || speedKmh < 0.5) return '--:--';
-  const paceDecimal = 60 / speedKmh;
-  const mins = Math.floor(paceDecimal);
-  const secs = Math.round((paceDecimal - mins) * 60);
-  return `${mins}:${secs.toString().padStart(2, '0')}`;
-};
+// --- 4. COMPONENTES ---
 
-function BoatCard({ boat, isTracking, onClose, onAssume }) {
+function SlideToStop({ onStop }) {
+  const [sliderPos, setSliderPos] = useState(0);
+  const containerRef = useRef(null);
+  const isDragging = useRef(false);
+  const handleStart = () => { isDragging.current = true; };
+  const handleMove = (e) => {
+    if (!isDragging.current) return;
+    const clientX = e.touches ? e.touches[0].clientX : e.clientX;
+    const rect = containerRef.current.getBoundingClientRect();
+    let pos = ((clientX - rect.left - 25) / (rect.width - 60)) * 100;
+    pos = Math.max(0, Math.min(100, pos));
+    setSliderPos(pos);
+    if (pos >= 95) { isDragging.current = false; onStop(); }
+  };
+  const handleEnd = () => { if (sliderPos < 95) { setSliderPos(0); isDragging.current = false; } };
+  return (
+    <div ref={containerRef} onMouseMove={handleMove} onTouchMove={handleMove} onMouseUp={handleEnd} onTouchEnd={handleEnd} onMouseLeave={handleEnd} style={{ width: '100%', height: '64px', background: '#fee2e2', borderRadius: '32px', position: 'relative', overflow: 'hidden', display: 'flex', alignItems: 'center', justifyContent: 'center', border: '2px solid #ef4444', touchAction: 'none' }}>
+      <div style={{ color: '#ef4444', fontWeight: 'bold', fontSize: '14px', opacity: 1 - (sliderPos/100), transition: 'opacity 0.1s' }}>DESLIZE PARA PARAR</div>
+      <div onMouseDown={handleStart} onTouchStart={handleStart} style={{ position: 'absolute', left: `calc(${sliderPos}% + 5px)`, top: '5px', width: '54px', height: '54px', background: '#ef4444', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'white', boxShadow: '0 4px 10px rgba(239,68,68,0.4)', cursor: 'grab', transition: isDragging.current ? 'none' : 'left 0.3s' }}><ArrowRight size={24} /></div>
+    </div>
+  );
+}
+
+function BoatCard({ boat, isTracking, onClose }) {
   const [showStatusLabel, setShowStatusLabel] = useState(false);
   const labelTimeoutRef = useRef(null);
   if (!boat) return null;
@@ -71,8 +93,8 @@ function BoatCard({ boat, isTracking, onClose, onAssume }) {
   const diffMinutes = (Date.now() - new Date(boat.last_updated).getTime()) / 60000;
   let statusColor = '#10b981'; 
   let statusLabel = 'Sinal OK';
-  if (diffMinutes >= 10) { statusColor = '#ef4444'; statusLabel = 'Sem sinal'; }
-  else if (diffMinutes >= 5) { statusColor = '#f59e0b'; statusLabel = 'Sinal fraco'; }
+  if (diffMinutes >= 30) { statusColor = '#ef4444'; statusLabel = 'Offline'; }
+  else if (diffMinutes >= 10) { statusColor = '#f59e0b'; statusLabel = 'Atenção'; }
   const lastUpdateText = boat.last_updated ? (diffMinutes < 1 ? 'agora' : `há ${Math.floor(diffMinutes)}m`) : 'nunca';
   const handleLedClick = () => {
     setShowStatusLabel(true);
@@ -82,7 +104,7 @@ function BoatCard({ boat, isTracking, onClose, onAssume }) {
   return (
     <div style={{ background: 'rgba(255,255,255,0.98)', padding: '12px', borderRadius: '16px', border: `2px solid ${isTracking ? '#10b981' : '#1e3a8a'}`, boxShadow: '0 8px 25px rgba(0,0,0,0.15)', width: '280px', pointerEvents: 'auto', position: 'relative' }}>
       <div style={{ position: 'absolute', top: '-10px', right: '40px', display: 'flex', flexDirection: 'column', alignItems: 'flex-end', zIndex: 100 }}>
-        <div onClick={handleLedClick} style={{ width: '16px', height: '16px', borderRadius: '50%', background: statusColor, border: '2px solid white', boxShadow: '0 2px 5px rgba(0,0,0,0.2)', cursor: 'pointer', animation: diffMinutes < 5 ? 'pulse 2s infinite' : 'none' }} />
+        <div onClick={handleLedClick} style={{ width: '16px', height: '16px', borderRadius: '50%', background: statusColor, border: '2px solid white', boxShadow: '0 2px 5px rgba(0,0,0,0.2)', cursor: 'pointer', animation: diffMinutes < 10 ? 'pulse 2s infinite' : 'none' }} />
         {showStatusLabel && <div style={{ background: '#1e293b', color: 'white', padding: '4px 8px', borderRadius: '6px', fontSize: '10px', marginTop: '5px', whiteSpace: 'nowrap', boxShadow: '0 4px 10px rgba(0,0,0,0.3)' }}>{statusLabel} • {lastUpdateText}</div>}
       </div>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '10px' }}>
@@ -100,7 +122,6 @@ function BoatCard({ boat, isTracking, onClose, onAssume }) {
         <div style={smallTelemetryStyle}><Activity size={12} color="#059669" /><strong>{(boat.speed || 0).toFixed(1)}</strong><small>km/h</small></div>
         <div style={smallTelemetryStyle}><Timer size={12} color="#f59e0b" /><strong>{pace}</strong></div>
       </div>
-      {onAssume && <button onClick={() => onAssume(boat)} style={{ ...btnStyle, padding: '10px', fontSize: '13px', marginTop: '10px' }}>Assumir Barco</button>}
     </div>
   );
 }
@@ -176,6 +197,7 @@ export default function App() {
   const [nickname, setNickname] = useState('');
   const [isTracking, setIsTracking] = useState(() => localStorage.getItem('vtl_tracking_active') === 'true');
   const [trackingBoatId, setTrackingBoatId] = useState(() => localStorage.getItem('vtl_tracking_id'));
+  const [showBgInfo, setShowBgInfo] = useState(true); 
   const [isAdmin, setIsAdmin] = useState(() => localStorage.getItem('vtl_admin') === 'true');
   const [activeRankingCategory, setActiveRankingCategory] = useState('Geral');
   const [raceStartTime, setRaceStartTime] = useState(null);
@@ -188,10 +210,15 @@ export default function App() {
   const lastSentRef = useRef(0);
   const wakeLockRef = useRef(null);
 
+  const requestWakeLock = async () => { if ('wakeLock' in navigator && !wakeLockRef.current) { try { wakeLockRef.current = await navigator.wakeLock.request('screen'); } catch (err) {} } };
+  useEffect(() => {
+    const handleVisibilityChange = () => { if (document.visibilityState === 'visible' && isTrackingRef.current) requestWakeLock(); };
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+    return () => document.removeEventListener('visibilitychange', handleVisibilityChange);
+  }, []);
   useEffect(() => { if (!isTracking) localStorage.setItem('vtl_view', view); }, [view, isTracking]);
 
   const fetchBoats = async () => { try { const res = await axios.get(`${API_URL}/api/boats`); setBoats(res.data); } catch (e) {} };
-
   useEffect(() => {
     fetchBoats(); const t = setInterval(fetchBoats, 30000);
     const timeT = setInterval(() => setCurrentTime(Date.now()), 10000);
@@ -200,24 +227,22 @@ export default function App() {
       if (isTrackingRef.current && Number(trackingBoatIdRef.current) === Number(d.boatId)) setSyncStatus('ok');
       setBoats(prev => (prev || []).map(b => Number(b.id) === Number(d.boatId) ? { ...b, ...d } : b));
     });
-    socket.on('control_taken', d => {
-      if (isTrackingRef.current && Number(trackingBoatIdRef.current) === Number(d.boatId) && d.senderId !== CLIENT_ID) {
-        alert("Outro celular assumiu este barco."); stopTracking();
-      }
-    });
+    socket.on('control_taken', d => { if (isTrackingRef.current && Number(trackingBoatIdRef.current) === Number(d.boatId) && d.senderId !== CLIENT_ID) { alert("Outro celular assumiu este barco."); stopTracking(); } });
     return () => { clearInterval(t); clearInterval(timeT); socket.off('config_updated'); socket.off('location_changed'); socket.off('control_taken'); };
   }, []);
 
+  const openSettings = () => { if (Capacitor.getPlatform() === 'android') NativeSettings.openAndroid({ option: AndroidSettings.ApplicationDetails }); else NativeSettings.openIOS({ option: IOSSettings.App }); };
   const startTracking = async (id) => {
     try {
-      if ('wakeLock' in navigator) wakeLockRef.current = await navigator.wakeLock.request('screen');
+      if (isApp) await Geolocation.requestPermissions();
+      await requestWakeLock();
       setIsTracking(true); isTrackingRef.current = true;
       setTrackingBoatId(id); trackingBoatIdRef.current = id;
       localStorage.setItem('vtl_tracking_id', id);
       localStorage.setItem('vtl_tracking_active', 'true');
       const handler = async (pos) => {
         const now = Date.now();
-        if (now - lastSentRef.current > 20000) {
+        if (now - lastSentRef.current > 15000) {
           setSyncStatus('sending');
           let bat = 100; try { const info = await Device.getBatteryInfo(); bat = Math.round(info.batteryLevel * 100); } catch (e) {}
           socket.emit('update_location', { boatId: id, lat: pos.coords.latitude, lng: pos.coords.longitude, speed: pos.coords.speed, heading: pos.coords.heading, batteryLevel: bat });
@@ -229,11 +254,11 @@ export default function App() {
       else watchIdRef.current = navigator.geolocation.watchPosition(handler, null, { enableHighAccuracy: true });
     } catch (e) { alert('Erro GPS'); }
   };
-
   const stopTracking = () => {
+    if (trackingBoatIdRef.current) socket.emit('stop_tracking', { boatId: trackingBoatIdRef.current });
     setIsTracking(false); isTrackingRef.current = false;
     if (watchIdRef.current) { if (isApp) Geolocation.clearWatch({ id: watchIdRef.current }); else navigator.geolocation.clearWatch(watchIdRef.current); }
-    if (wakeLockRef.current) wakeLockRef.current.release();
+    if (wakeLockRef.current) { wakeLockRef.current.release(); wakeLockRef.current = null; }
     localStorage.removeItem('vtl_tracking_id');
     localStorage.removeItem('vtl_tracking_active');
     window.location.reload();
@@ -315,13 +340,19 @@ export default function App() {
         <div style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, zIndex: isTracking ? 30 : 5, overflowY: 'auto', background: (view === 'map' || isTracking) ? 'transparent' : '#f8fafc', pointerEvents: (view === 'map' || isTracking) ? 'none' : 'auto' }}>
           {isTracking ? (
             <div style={{ height: '100%', position: 'relative', pointerEvents: 'none' }}>
-              <div style={{ position: 'absolute', top: '10px', left: '10px', right: '10px', pointerEvents: 'auto', display: 'flex', justifyContent: 'center' }}>
+              <div style={{ position: 'absolute', top: '10px', left: '10px', right: '10px', pointerEvents: 'auto', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '10px' }}>
                 <BoatCard boat={currentBoat} isTracking={true} />
+                {showBgInfo && (
+                  <div style={{ background: '#1e3a8a', color: 'white', padding: '15px', borderRadius: '15px', fontSize: '12px', display: 'flex', flexDirection: 'column', gap: '10px', boxShadow: '0 4px 15px rgba(0,0,0,0.3)', width: '280px', position: 'relative' }}>
+                    <button onClick={() => setShowBgInfo(false)} style={{ position: 'absolute', top: '8px', right: '8px', background: 'none', border: 'none', color: 'white', opacity: 0.7 }}><X size={16}/></button>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px', fontWeight: 'bold' }}><Sun size={16} /> MODO TRANSMISSÃO</div>
+                    <p style={{ margin: 0, fontSize: '11px', opacity: 0.9, paddingRight: '20px' }}>Para sinal constante, selecione: <strong>Localização - Permitir o tempo todo</strong>.</p>
+                    <button onClick={openSettings} style={{ background: '#10b981', border: 'none', color: 'white', padding: '8px', borderRadius: '8px', fontSize: '11px', fontWeight: 'bold', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '5px' }}><Settings size={14} /> ABRIR CONFIGURAÇÕES</button>
+                  </div>
+                )}
               </div>
-              <div style={{ position: 'absolute', bottom: '25px', left: '25px', right: '25px', pointerEvents: 'auto' }}>
-                <button onClick={() => { if(confirm("Parar transmissão?")) stopTracking(); }} style={{ ...btnStyle, background: '#ef4444', height: '54px', boxShadow: '0 4px 20px rgba(239,68,68,0.4)' }}>
-                  <LogOut size={20} /> PARAR RASTREIO
-                </button>
+              <div style={{ position: 'absolute', bottom: '35px', left: '25px', right: '25px', pointerEvents: 'auto' }}>
+                <SlideToStop onStop={stopTracking} />
               </div>
             </div>
           ) : (
@@ -334,8 +365,8 @@ export default function App() {
                   </div>
                   {(() => {
                     const filtered = (boats || []).filter(b => activeRankingCategory === 'Geral' || b.category === activeRankingCategory);
-                    const online = filtered.filter(b => (currentTime - new Date(b.last_updated).getTime()) / 60000 < 5).sort((a,b) => b.distance - a.distance);
-                    const offline = filtered.filter(b => (currentTime - new Date(b.last_updated).getTime()) / 60000 >= 5).sort((a,b) => b.distance - a.distance);
+                    const online = filtered.filter(b => (currentTime - new Date(b.last_updated).getTime()) / 60000 < 30).sort((a,b) => b.distance - a.distance);
+                    const offline = filtered.filter(b => (currentTime - new Date(b.last_updated).getTime()) / 60000 >= 30).sort((a,b) => b.distance - a.distance);
                     return (
                       <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
                         {online.map((b, i) => (
@@ -407,6 +438,7 @@ export default function App() {
           )}
         </div>
       </div>
+      <style>{` @keyframes pulse { 0% { transform: scale(0.95); opacity: 0.7; } 50% { transform: scale(1.1); opacity: 1; } 100% { transform: scale(0.95); opacity: 0.7; } } `}</style>
     </div>
   );
 }
