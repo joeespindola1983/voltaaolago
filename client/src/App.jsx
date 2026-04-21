@@ -16,7 +16,7 @@ const BACKEND_URL = 'https://voltaaolago-backend.onrender.com';
 const API_URL = BACKEND_URL; 
 const socket = io(API_URL);
 
-const VERSION = "v2.1.6";
+const VERSION = "v2.1.7";
 const CATEGORIES = ['Geral', 'Estreante', 'Open', '40+', '50+', '60/70+'];
 const CLIENT_ID = Math.random().toString(36).substring(7);
 
@@ -71,16 +71,16 @@ function BoatCard({ boat, isTracking, onClose, onAssume }) {
         </div>
       </div>
 
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '6px', marginBottom: onAssume ? '10px' : '0' }}>
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '6px' }}>
         <div style={miniTelemetry}><Navigation size={12} color="#2563eb" /><div><strong>{boat.distance.toFixed(2)}</strong><small>km</small></div></div>
-        <div style={miniTelemetry}><Activity size={12} color="#059669" /><div><strong>{boat.speed?.toFixed(1) || '0.0'}</strong><small>kt</small></div></div>
-        <div style={miniTelemetry}><Timer size={12} color="#f59e0b" /><div><strong>{pace}</strong><small>/k</small></div></div>
+        <div style={miniTelemetry}><Activity size={12} color="#059669" /><div><strong>{boat.speed?.toFixed(1) || '0.0'}</strong><small>km/h</small></div></div>
+        <div style={miniTelemetry}><Timer size={12} color="#f59e0b" /><div><strong>{pace}</strong></div></div>
       </div>
 
       {onAssume && (
         <button onClick={() => onAssume(boat)} style={{ 
-          width: '100%', padding: '8px', background: '#1e3a8a', color: 'white', border: 'none', 
-          borderRadius: '8px', fontSize: '12px', fontWeight: 'bold', cursor: 'pointer' 
+          width: '100%', padding: '10px', background: '#1e3a8a', color: 'white', border: 'none', 
+          borderRadius: '10px', fontSize: '13px', fontWeight: 'bold', cursor: 'pointer', marginTop: '10px' 
         }}>Assumir Transmissão</button>
       )}
     </div>
@@ -149,13 +149,6 @@ export default function App() {
 
   useEffect(() => { if (!isTracking) localStorage.setItem('vtl_view', view); }, [view, isTracking]);
 
-  useEffect(() => {
-    const params = new URLSearchParams(window.location.search);
-    if (params.get('u') === 'admin' && params.get('p') === 'lago2026') { 
-      setIsAdmin(true); localStorage.setItem('vtl_admin', 'true'); setView('admin'); 
-    }
-  }, []);
-
   const fetchBoats = async () => { try { const res = await axios.get(`${API_URL}/api/boats`); setBoats(res.data); } catch (e) {} };
 
   useEffect(() => {
@@ -181,7 +174,7 @@ export default function App() {
     }
   }, [boats]);
 
-  const startTracking = async (id) => {
+  const startTracking = async (id, isReconnect = false) => {
     try {
       if ('wakeLock' in navigator) wakeLockRef.current = await navigator.wakeLock.request('screen');
       setIsTracking(true); isTrackingRef.current = true;
@@ -212,7 +205,6 @@ export default function App() {
     window.location.reload();
   };
 
-  const currentBoat = boats.find(b => Number(b.id) === Number(trackingBoatId));
   const searchResultsMap = mapSearchQuery ? (boats || []).filter(b => b.name.toLowerCase().includes(mapSearchQuery.toLowerCase()) || b.nickname?.toLowerCase().includes(mapSearchQuery.toLowerCase())).slice(0, 5) : [];
   const searchResultsTrack = trackSearchQuery ? (boats || []).filter(b => b.name.toLowerCase().includes(trackSearchQuery.toLowerCase()) || b.nickname?.toLowerCase().includes(trackSearchQuery.toLowerCase())).slice(0, 5) : [];
 
@@ -238,7 +230,6 @@ export default function App() {
           </div>
         )}
 
-        {/* INTERFACE DO MAPA (BUSCA + CARD) */}
         {!isTracking && view === 'map' && (
           <div style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, zIndex: 20, pointerEvents: 'none' }}>
             <div style={{ position: 'absolute', top: '15px', right: '15px', pointerEvents: 'auto' }}>
@@ -264,16 +255,16 @@ export default function App() {
               </div>
               {selectedMapBoatId && (
                 <div style={{ marginTop: '8px', pointerEvents: 'auto' }}>
-                  <BoatCard boat={boats.find(b => b.id === selectedMapBoatId)} onClose={() => setSelectedMapBoatId(null)} onAssume={(b) => { setNickname(b.nickname); startTracking(b.id); }} />
+                  {/* REMOVIDO onAssume para não mostrar botão no mapa */}
+                  <BoatCard boat={boats.find(b => b.id === selectedMapBoatId)} onClose={() => setSelectedMapBoatId(null)} />
                 </div>
               )}
             </div>
           </div>
         )}
 
-        {/* INTERFACE DE TRANSMISSÃO (DASHBOARD) */}
         <div style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, zIndex: isTracking ? 30 : 5, overflowY: 'auto', background: (view === 'map' || isTracking) ? 'transparent' : '#f8fafc', pointerEvents: (view === 'map' || isTracking) ? 'none' : 'auto' }}>
-          {isTracking ? (
+          {isTracking && (
             <div style={{ height: '100%', position: 'relative', pointerEvents: 'none' }}>
               <div style={{ position: 'absolute', top: '10px', left: '10px', right: '10px', pointerEvents: 'auto', display: 'flex', justifyContent: 'center' }}>
                 <BoatCard boat={currentBoat} isTracking={true} />
@@ -284,7 +275,9 @@ export default function App() {
                 </button>
               </div>
             </div>
-          ) : (
+          )}
+
+          {!isTracking && (
             <div style={{ pointerEvents: 'auto' }}>
               {view === 'ranking' && (
                 <div style={{ padding: '20px' }}>
@@ -301,7 +294,6 @@ export default function App() {
                   ))}
                 </div>
               )}
-
               {view === 'boats' && (
                 <div style={{ padding: '20px' }}>
                   <h2 onClick={() => { window._c = (window._c || 0) + 1; if (window._c >= 5) setIsAdmin(true); }}>Equipes</h2>
@@ -309,12 +301,11 @@ export default function App() {
                     <div key={b.id} style={rankCardStyle}>
                       <div style={{ width: '12px', height: '12px', borderRadius: '50%', background: b.color }} />
                       <div style={{ flex: 1 }}><strong>{b.name}</strong><br/><small>ID: {b.nickname.toUpperCase()}</small></div>
-                      <button onClick={() => { setNickname(b.nickname); setView('track'); }} style={{ padding: '5px 10px', borderRadius: '8px', border: 'none', background: '#f1f5f9' }}>Acessar</button>
+                      <button onClick={() => { setNickname(b.nickname); setView('track'); }} style={{ padding: '5px 10px', borderRadius: '8px', border: 'none', background: '#f1f5f9' }}>Transmitir</button>
                     </div>
                   ))}
                 </div>
               )}
-
               {view === 'track' && (
                 <div style={{ padding: '30px 20px' }}>
                   <div style={cardStyle}>
@@ -326,7 +317,7 @@ export default function App() {
                         <input placeholder="Digite o nome da equipe..." value={trackSearchQuery} onChange={e => setTrackSearchQuery(e.target.value)} style={{ border: 'none', background: 'none', flex: 1, padding: '0 10px', fontSize: '16px', outline: 'none' }} />
                       </div>
                       {searchResultsTrack.length > 0 && (
-                        <div style={{ marginTop: '10px', background: 'white', borderRadius: '15px', boxShadow: '0 4px 15px rgba(0,0,0,0.1)', overflow: 'hidden', border: '1px solid #f1f5f9' }}>
+                        <div style={{ marginTop: '10px', background: 'white', borderRadius: '15px', boxShadow: '0 8px 25px rgba(0,0,0,0.2)', overflow: 'hidden', border: '1px solid #f1f5f9' }}>
                           {searchResultsTrack.map(b => (
                             <div key={b.id} onClick={async () => {
                               setBoatName(b.name); setNickname(b.nickname); setTrackSearchQuery('');
@@ -348,10 +339,9 @@ export default function App() {
                   </div>
                 </div>
               )}
-
               {isAdmin && view === 'admin' && (
                 <div style={{ padding: '20px' }}>
-                  <h2>Painel Admin</h2>
+                  <h2>Admin</h2>
                   <div style={cardStyle}>
                     {!raceStartTime ? (
                       <button onClick={() => axios.post(`${API_URL}/api/config`, { raceStartTime: Date.now() })} style={{ ...btnStyle, background: '#10b981', marginBottom: '10px' }}>INICIAR PROVA</button>
