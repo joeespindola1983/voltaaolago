@@ -16,14 +16,14 @@ const isApp = Capacitor.isNativePlatform();
 const BACKEND_URL = 'https://voltaaolago-backend.onrender.com';
 const API_URL = BACKEND_URL; 
 const socket = io(API_URL);
-const VERSION = "v2.4.7 (Stable)";
+const VERSION = "v2.7.5 (Final Build)";
 const CATEGORIES = ['Geral', 'Estreante', 'Open', '40+', '50+', '60/70+'];
 const CLIENT_ID = Math.random().toString(36).substring(7);
 
 // --- 2. ESTILOS ---
 const navBtnStyle = { background: 'none', border: 'none', color: 'white', display: 'flex', flexDirection: 'column', alignItems: 'center', fontSize: '10px', gap: '2px' };
-const btnStyle = { width: '100%', padding: '16px', background: '#1e3a8a', color: 'white', border: 'none', borderRadius: '12px', fontWeight: 'bold', fontSize: '16px', cursor: 'pointer' };
-const cardStyle = { background: 'white', padding: '25px', borderRadius: '25px', boxShadow: '0 4px 15px rgba(0,0,0,0.05)' };
+const btnStyle = { width: '100%', padding: '16px', background: '#1e3a8a', color: 'white', border: 'none', borderRadius: '12px', fontWeight: 'bold', fontSize: '16px', cursor: 'pointer', boxSizing: 'border-box' };
+const cardStyle = { background: 'white', padding: '25px', borderRadius: '25px', boxShadow: '0 4px 15px rgba(0,0,0,0.05)', boxSizing: 'border-box' };
 const rankCardStyle = { background: 'white', padding: '15px', borderRadius: '15px', display: 'flex', alignItems: 'center', gap: '15px', marginBottom: '10px', border: '1px solid #f1f5f9', cursor: 'pointer' };
 const catBtnStyle = { padding: '8px 15px', borderRadius: '20px', border: 'none', fontSize: '12px', fontWeight: 'bold', whiteSpace: 'nowrap', cursor: 'pointer' };
 const floatingBtnStyle = { background: 'white', border: 'none', borderRadius: '12px', width: '44px', height: '44px', display: 'flex', alignItems: 'center', justifyContent: 'center', boxShadow: '0 4px 15px rgba(0,0,0,0.15)', color: '#1e3a8a', cursor: 'pointer', pointerEvents: 'auto' };
@@ -32,7 +32,7 @@ const modalOverlayStyle = { position: 'absolute', top: 0, left: 0, right: 0, bot
 const modalContentStyle = { background: 'white', borderRadius: '20px', padding: '20px', width: '100%', maxWidth: '400px', boxShadow: '0 10px 25px rgba(0,0,0,0.2)' };
 const modalButtonStyle = { background: '#f1f5f9', border: 'none', padding: '15px', borderRadius: '12px', textAlign: 'left', fontSize: '16px', cursor: 'pointer', color: '#1e3a8a', display: 'flex', alignItems: 'center', justifyContent: 'space-between' };
 
-// --- 3. FUNÇÕES UTILITÁRIAS (DEVEM VIR ANTES DOS COMPONENTES) ---
+// --- 3. FUNÇÕES UTILITÁRIAS ---
 const calculatePace = (speedKmh) => {
   if (!speedKmh || speedKmh < 0.5) return '--:--';
   const paceDecimal = 60 / speedKmh;
@@ -157,7 +157,7 @@ function BoatLayer({ boats, trackingBoatId, selectedMapBoatId, setSelectedMapBoa
         if (members.length === 1) {
           const boat = members[0];
           const isSelected = Number(boat.id) === Number(selectedMapBoatId) || Number(boat.id) === Number(trackingBoatId);
-          return <Marker key={boat.id} position={[boat.lat, boat.lng]} icon={boatIcon(boat.name, isSelected, boat.color, boat.heading, categoryLeaders[boat.category]?.id === boat.id)} eventHandlers={{ click: () => setSelectedMapBoatId(boat.id) }} />;
+          return <Marker key={boat.id} position={[boat.lat, boat.lng]} icon={boatIcon(boat.name, isSelected, boat.color, boat.heading, categoryLeaders[boat.category]?.id === b.id)} eventHandlers={{ click: () => setSelectedMapBoatId(boat.id) }} />;
         }
         return <Marker key={`cluster-${anchor.id}`} position={[anchor.lat, anchor.lng]} icon={clusterIcon(members.length)} eventHandlers={{ click: () => setClusterModalBoats(members) }} />;
       })}
@@ -416,7 +416,20 @@ export default function App() {
                         </div>
                       )}
                     </div>
-                    {!isApp && <a href="/app.apk" download style={{ ...btnStyle, background: '#059669', textDecoration: 'none', display: 'block', textAlign: 'center', marginTop: '20px' }}>Baixar App Android</a>}
+                    
+                    {!isApp && (
+                      <div style={{ marginTop: '30px', borderTop: '1px solid #f1f5f9', paddingTop: '20px' }}>
+                        <a href="/app.apk" download style={{ ...btnStyle, background: '#059669', textDecoration: 'none', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px' }}>
+                          <Download size={20} /> Baixar App Android
+                        </a>
+                        <div style={{ marginTop: '12px', background: '#fffbeb', border: '1px solid #fef3c7', padding: '12px', borderRadius: '10px' }}>
+                          <p style={{ margin: 0, fontSize: '11px', color: '#92400e', lineHeight: '1.4' }}>
+                            <strong>Dica de Instalação:</strong> Se o Android mostrar um aviso de segurança, clique em "Mais detalhes" e depois em "Instalar assim mesmo".
+                          </p>
+                        </div>
+                      </div>
+                    )}
+                    
                     <div style={{ textAlign: 'center', marginTop: '20px', fontSize: '10px', color: '#cbd5e1' }}>{VERSION}</div>
                   </div>
                 </div>
