@@ -17,7 +17,7 @@ const isApp = Capacitor.isNativePlatform();
 const BACKEND_URL = 'https://voltaaolago-backend.onrender.com';
 const API_URL = BACKEND_URL; 
 const socket = io(API_URL);
-const VERSION = "v2.8.2 (Bottom Bar)";
+const VERSION = "v2.8.7 (iOS Safe Area)";
 const CATEGORIES = ['Geral', 'Estreante', 'Open', '40+', '50+', '60/70+'];
 const CLIENT_ID = Math.random().toString(36).substring(7);
 
@@ -216,12 +216,7 @@ export default function App() {
     if (params.get('u') === 'admin' && params.get('p') === 'lago2026') { setIsAdmin(true); localStorage.setItem('vtl_admin', 'true'); setView('admin'); }
   }, []);
 
-  // FULLSCREEN IMMERSIVE MODE (Hiding Android Status Bar)
-  useEffect(() => {
-    if (isApp) {
-      StatusBar.hide().catch(() => {});
-    }
-  }, []);
+  useEffect(() => { if (isApp) StatusBar.hide().catch(() => {}); }, []);
 
   const requestWakeLock = async () => { if ('wakeLock' in navigator && !wakeLockRef.current) { try { wakeLockRef.current = await navigator.wakeLock.request('screen'); } catch (err) {} } };
   useEffect(() => {
@@ -282,7 +277,7 @@ export default function App() {
   const currentBoat = boats.find(b => Number(b.id) === Number(trackingBoatId));
 
   return (
-    <div style={{ height: '100vh', width: '100vw', display: 'flex', flexDirection: 'column', background: '#f8fafc', position: 'fixed', top: 0, left: 0, overflow: 'hidden' }}>
+    <div style={{ height: '100dvh', width: '100vw', display: 'flex', flexDirection: 'column', background: '#f8fafc', position: 'fixed', top: 0, left: 0, overflow: 'hidden' }}>
       <div style={{ flex: 1, position: 'relative', overflow: 'hidden' }}>
         {clusterModalBoats && (
           <div style={modalOverlayStyle}>
@@ -312,10 +307,12 @@ export default function App() {
 
         {!isTracking && view === 'map' && (
           <div style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, zIndex: 20, pointerEvents: 'none' }}>
-            <div style={{ position: 'absolute', top: '15px', right: '15px', pointerEvents: 'auto' }}>
+            {/* SAFE AREA PARA BOTÃO MAXIMIZAR */}
+            <div style={{ position: 'absolute', top: 'calc(15px + env(safe-area-inset-top))', right: '15px', pointerEvents: 'auto' }}>
               <button onClick={() => setFitAllTrigger(t => t + 1)} style={floatingBtnStyle}><Maximize size={24}/></button>
             </div>
-            <div style={{ position: 'absolute', top: '15px', left: '15px', right: '75px', pointerEvents: 'auto' }}>
+            {/* SAFE AREA PARA BUSCA */}
+            <div style={{ position: 'absolute', top: 'calc(15px + env(safe-area-inset-top))', left: '15px', right: '75px', pointerEvents: 'auto' }}>
               <div style={{ position: 'relative' }}>
                 <div style={{ background: 'white', borderRadius: '12px', display: 'flex', alignItems: 'center', padding: '0 12px', boxShadow: '0 4px 15px rgba(0,0,0,0.1)', height: '44px' }}>
                   <Search size={16} color="#64748b" />
@@ -345,7 +342,8 @@ export default function App() {
         <div style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, zIndex: isTracking ? 30 : 5, overflowY: 'auto', background: (view === 'map' || isTracking) ? 'transparent' : '#f8fafc', pointerEvents: (view === 'map' || isTracking) ? 'none' : 'auto' }}>
           {isTracking ? (
             <div style={{ height: '100%', position: 'relative', pointerEvents: 'none' }}>
-              <div style={{ position: 'absolute', top: '10px', left: '10px', right: '10px', pointerEvents: 'auto', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '10px' }}>
+              {/* SAFE AREA PARA TELEMETRIA AO VIVO */}
+              <div style={{ position: 'absolute', top: 'calc(10px + env(safe-area-inset-top))', left: '10px', right: '10px', pointerEvents: 'auto', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '10px' }}>
                 <BoatCard boat={currentBoat} isTracking={true} />
                 {showBgInfo && (
                   <div style={{ background: '#1e3a8a', color: 'white', padding: '15px', borderRadius: '15px', fontSize: '12px', display: 'flex', flexDirection: 'column', gap: '10px', boxShadow: '0 4px 15px rgba(0,0,0,0.3)', width: '280px', position: 'relative' }}>
@@ -356,14 +354,14 @@ export default function App() {
                   </div>
                 )}
               </div>
-              <div style={{ position: 'absolute', bottom: '35px', left: '25px', right: '25px', pointerEvents: 'auto' }}>
+              <div style={{ position: 'absolute', bottom: 'calc(35px + env(safe-area-inset-bottom))', left: '25px', right: '25px', pointerEvents: 'auto' }}>
                 <SlideToStop onStop={stopTracking} />
               </div>
             </div>
           ) : (
             <div style={{ pointerEvents: 'auto' }}>
               {view === 'ranking' && (
-                <div style={{ padding: '20px' }}>
+                <div style={{ padding: '20px', paddingTop: 'calc(20px + env(safe-area-inset-top))' }}>
                   <h2 onClick={() => { window._c = (window._c || 0) + 1; if (window._c >= 5) setIsAdmin(true); }}>Classificação</h2>
                   <div style={{ display: 'flex', gap: '5px', overflowX: 'auto', marginBottom: '15px' }}>
                     {CATEGORIES.map(c => <button key={c} onClick={() => setActiveRankingCategory(c)} style={{ ...catBtnStyle, background: activeRankingCategory === c ? '#1e3a8a' : '#f1f5f9', color: activeRankingCategory === c ? '#fff' : '#64748b' }}>{c}</button>)}
@@ -394,7 +392,7 @@ export default function App() {
                 </div>
               )}
               {view === 'track' && (
-                <div style={{ padding: '30px 20px' }}>
+                <div style={{ padding: '30px 20px', paddingTop: 'calc(30px + env(safe-area-inset-top))' }}>
                   <div style={cardStyle}>
                     <h2>Transmitir GPS</h2>
                     <p style={{ fontSize: '13px', color: '#64748b', marginBottom: '20px' }}>Procure sua equipe para iniciar o rastreio.</p>
@@ -424,23 +422,18 @@ export default function App() {
                     
                     {!isApp && (
                       <div style={{ marginTop: '30px', borderTop: '1px solid #f1f5f9', paddingTop: '20px' }}>
-                        <a href="/app.apk" download style={{ ...btnStyle, background: '#059669', textDecoration: 'none', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px' }}>
-                          <Download size={20} /> Baixar App Android
-                        </a>
+                        <a href="/app.apk" download style={{ ...btnStyle, background: '#059669', textDecoration: 'none', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px' }}><Download size={20} /> Baixar App Android</a>
                         <div style={{ marginTop: '12px', background: '#fffbeb', border: '1px solid #fef3c7', padding: '12px', borderRadius: '10px' }}>
-                          <p style={{ margin: 0, fontSize: '11px', color: '#92400e', lineHeight: '1.4' }}>
-                            <strong>Dica:</strong> No Android, se houver aviso de segurança, clique em "Mais detalhes" e depois em "Instalar assim mesmo".
-                          </p>
+                          <p style={{ margin: 0, fontSize: '11px', color: '#92400e', lineHeight: '1.4' }}><strong>Dica:</strong> Se houver aviso de segurança, clique em "Mais detalhes" e "Instalar assim mesmo".</p>
                         </div>
                       </div>
                     )}
-                    
                     <div style={{ textAlign: 'center', marginTop: '20px', fontSize: '10px', color: '#cbd5e1' }}>{VERSION}</div>
                   </div>
                 </div>
               )}
               {isAdmin && view === 'admin' && (
-                <div style={{ padding: '20px' }}>
+                <div style={{ padding: '20px', paddingTop: 'calc(20px + env(safe-area-inset-top))' }}>
                   <h2>Admin</h2>
                   <div style={cardStyle}>
                     {!raceStartTime ? (
@@ -457,7 +450,7 @@ export default function App() {
         </div>
       </div>
       {!isTracking && (
-        <nav style={{ background: '#1e3a8a', color: 'white', padding: '12px 5px', paddingBottom: isApp ? '25px' : '12px', display: 'flex', justifyContent: 'space-around', zIndex: 1000, boxShadow: '0 -2px 10px rgba(0,0,0,0.1)' }}>
+        <nav style={{ background: '#1e3a8a', color: 'white', padding: '12px 5px', paddingBottom: 'calc(12px + env(safe-area-inset-bottom))', display: 'flex', justifyContent: 'space-around', zIndex: 1000, boxShadow: '0 -2px 10px rgba(0,0,0,0.1)' }}>
           <button onClick={() => setView('map')} style={navBtnStyle}><MapIcon size={20}/>Mapa</button>
           <button onClick={() => setView('ranking')} style={navBtnStyle}><Trophy size={20}/>Ranking</button>
           <button onClick={() => setView('track')} style={navBtnStyle}><Play size={20}/>Transmitir</button>
@@ -477,7 +470,6 @@ function RaceClock({ startTime }) {
       const d = Date.now() - startTime;
       const h = Math.floor(d/3600000);
       const m = Math.floor((d%3600000)/60000);
-      const s = Math.floor((d%60000)/10000); // Only refresh every 10s for performance
       setT(`${h}:${m.toString().padStart(2,'0')}`);
     }, 10000);
     const d = Date.now() - startTime;
@@ -487,5 +479,5 @@ function RaceClock({ startTime }) {
     return () => clearInterval(i);
   }, [startTime]);
   if (!startTime) return null;
-  return <div style={{ position: 'absolute', bottom: isApp ? 20 : 30, left: '50%', transform: 'translateX(-50%)', zIndex: 1000, background: 'rgba(30,58,138,0.9)', color: 'white', padding: '5px 15px', borderRadius: 12, fontWeight: 'bold', pointerEvents: 'none', fontSize: '14px' }}>{t}</div>;
+  return <div style={{ position: 'absolute', bottom: 'calc(20px + env(safe-area-inset-bottom))', left: '50%', transform: 'translateX(-50%)', zIndex: 1000, background: 'rgba(30,58,138,0.9)', color: 'white', padding: '5px 15px', borderRadius: 12, fontWeight: 'bold', pointerEvents: 'none', fontSize: '14px' }}>{t}</div>;
 }
