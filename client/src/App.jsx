@@ -742,9 +742,9 @@ export default function App() {
         <div style={{ marginBottom: '15px' }}>
           <div style={sectionTitleStyle}><RefreshCw size={16} /> Próximos Trechos</div>
           <div style={{ display: 'flex', flexDirection: 'column', gap: '5px' }}>
-            {boat.exchanges.map((ex, i) => (
+            {(boat.exchanges || []).map((ex, i) => (
               <div key={i} style={{ background: '#f8fafc', padding: '8px 12px', borderRadius: '8px', fontSize: '11px', border: '1px solid #e2e8f0' }}>
-                <strong>Trecho {i + 1}:</strong> {ex.join(', ')}
+                <strong>Trecho {i + 1}:</strong> {Array.isArray(ex) ? ex.join(', ') : 'Informação pendente'}
               </div>
             ))}
           </div>
@@ -984,7 +984,7 @@ export default function App() {
                       </div>
                       <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px' }}>
                         {athletes.length === 0 && <div style={{ fontSize: '11px', color: '#94a3b8', fontStyle: 'italic' }}>Adicione atletas acima primeiro</div>}
-                        {athletes.map(a => (
+                        {(athletes || []).map(a => (
                           <button key={a} onClick={() => {
                             const isIncluded = ex.includes(a);
                             setExchanges(exchanges.map((e, idx) => idx === exIdx ? (isIncluded ? e.filter(name => name !== a) : [...e, a]) : e));
@@ -1129,6 +1129,12 @@ export default function App() {
                           setTrackingBoatId(data.id); 
                           trackingBoatIdRef.current = data.id;
                           setNickname(trimmedNickname);
+                          localStorage.setItem('vtl_boat_id', data.id);
+                          localStorage.setItem('vtl_boat_nick', trimmedNickname);
+                          
+                          // Notifica o servidor para tomar o controle
+                          axios.post(`${API_URL}/api/boats/${data.id}/take_control`, { new_crew: [] }).catch(e => console.error(e));
+                          
                           setSyncStatus('idle');
                         } catch (err) { 
                           setSyncStatus('error');
@@ -1142,25 +1148,21 @@ export default function App() {
                       <h2 style={{ margin: '0 0 5px 0' }}>{boatName}</h2>
                       <div style={{ fontSize: '14px', color: '#059669', fontWeight: 'bold', marginBottom: '20px' }}>✓ Acesso Autorizado</div>
                       
-                      <h3 style={{ margin: '0 0 12px 0', fontSize: '16px', borderTop: '1px solid #f1f5f9', paddingTop: '20px' }}>Selecione o Trecho Atual</h3>
-                      <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
-                        {(exchanges || []).length === 0 && <p style={{ fontSize: '13px', color: '#ef4444' }}>Nenhum trecho configurado. Use o modo Admin para adicionar atletas e trechos se necessário.</p>}
-                        {(exchanges || []).map((ex, i) => (
-                          <button key={i} onClick={() => setSelectedExchangeIndex(i)} style={{ padding: '15px', borderRadius: '15px', textAlign: 'left', cursor: 'pointer', transition: 'all 0.2s', background: selectedExchangeIndex === i ? '#ecfdf5' : '#fff', border: selectedExchangeIndex === i ? '2px solid #10b981' : '1px solid #e2e8f0', boxShadow: selectedExchangeIndex === i ? '0 4px 12px rgba(16,185,129,0.1)' : 'none' }}>
-                            <div style={{ fontWeight: 'bold', color: selectedExchangeIndex === i ? '#065f46' : '#1e293b' }}>Trecho {i + 1}</div>
-                            <div style={{ fontSize: '12px', color: '#64748b', marginTop: '4px' }}>{Array.isArray(ex) ? ex.join(', ') : ''}</div>
-                          </button>
-                        ))}
+                      <div style={{ background: '#f8fafc', padding: '20px', borderRadius: '20px', border: '1px solid #e2e8f0', marginBottom: '20px', marginTop: '20px' }}>
+                        <p style={{ fontSize: '14px', color: '#1e293b', margin: 0 }}>Este celular passará a ser o rastreador oficial deste barco. Outros celulares logados no mesmo ID serão desconectados.</p>
                       </div>
+
                       <button onClick={async () => {
-                        if (exchanges.length === 0) return alert('O capitão precisa configurar os trechos primeiro!');
-                        const selectedCrew = exchanges[selectedExchangeIndex];
-                        await axios.post(`${API_URL}/api/boats/${trackingBoatId}/take_control`, { 
-                          new_crew: selectedCrew,
-                          exchange_index: selectedExchangeIndex 
-                        });
-                        activateHardwareGPS(trackingBoatId);
-                      }} style={{ ...startBtnStyle, marginTop: '20px', background: '#10b981' }}>Assumir Trecho e Iniciar GPS</button>
+                        if (!isTracking) {
+                          startTracking(trackingBoatId);
+                        } else {
+                          stopTracking();
+                        }
+                      }} style={{ ...startBtnStyle, background: isTracking ? '#ef4444' : '#1e3a8a', marginTop: '10px' }}>
+                        {isTracking ? 'Parar Transmissão' : 'Iniciar Rastreio (GPS)'}
+                      </button>
+
+                      <button onClick={() => { stopTracking(); setTrackingBoatId(null); localStorage.removeItem('vtl_boat_id'); }} style={{ ...startBtnStyle, background: 'none', color: '#64748b', border: '1px solid #e2e8f0', marginTop: '15px' }}>Sair / Trocar Barco</button>
                     </div>
                   )}
                 </div>
