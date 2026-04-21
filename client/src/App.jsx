@@ -16,7 +16,7 @@ const BACKEND_URL = 'https://voltaaolago-backend.onrender.com';
 const API_URL = BACKEND_URL; 
 const socket = io(API_URL);
 
-const VERSION = "v2.1.3";
+const VERSION = "v2.1.4";
 const CATEGORIES = ['Geral', 'Estreante', 'Open', '40+', '50+', '60/70+'];
 const CLIENT_ID = Math.random().toString(36).substring(7);
 
@@ -73,6 +73,7 @@ export default function App() {
   const [selectedMapBoatId, setSelectedMapBoatId] = useState(null);
   const [mapCategoryFilter, setMapCategoryFilter] = useState('Geral');
   const [mapSearchQuery, setMapSearchQuery] = useState('');
+  const [trackSearchQuery, setTrackSearchQuery] = useState('');
   const [boatName, setBoatName] = useState('');
   const [nickname, setNickname] = useState('');
   const [isTracking, setIsTracking] = useState(() => localStorage.getItem('vtl_tracking_active') === 'true');
@@ -163,7 +164,8 @@ export default function App() {
   };
 
   const currentBoat = boats.find(b => Number(b.id) === Number(trackingBoatId));
-  const searchResults = mapSearchQuery ? (boats || []).filter(b => b.name.toLowerCase().includes(mapSearchQuery.toLowerCase()) || b.nickname?.toLowerCase().includes(mapSearchQuery.toLowerCase())).slice(0, 5) : [];
+  const searchResultsMap = mapSearchQuery ? (boats || []).filter(b => b.name.toLowerCase().includes(mapSearchQuery.toLowerCase()) || b.nickname?.toLowerCase().includes(mapSearchQuery.toLowerCase())).slice(0, 5) : [];
+  const searchResultsTrack = trackSearchQuery ? (boats || []).filter(b => b.name.toLowerCase().includes(trackSearchQuery.toLowerCase()) || b.nickname?.toLowerCase().includes(trackSearchQuery.toLowerCase())).slice(0, 5) : [];
 
   return (
     <div style={{ height: '100vh', width: '100vw', display: 'flex', flexDirection: 'column', background: '#f8fafc', position: 'fixed', top: 0, left: 0, overflow: 'hidden' }}>
@@ -187,14 +189,11 @@ export default function App() {
           </div>
         )}
 
-        {/* INTERFACE DO MAPA (BUSCA + INFO DO BARCO) */}
         {!isTracking && view === 'map' && (
           <div style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, zIndex: 20, pointerEvents: 'none' }}>
             <div style={{ position: 'absolute', top: '15px', right: '15px', pointerEvents: 'auto' }}>
               <button onClick={() => setFitAllTrigger(t => t + 1)} style={floatingBtnStyle}><Maximize size={24}/></button>
             </div>
-            
-            {/* BUSCA NO MAPA */}
             <div style={{ position: 'absolute', top: '15px', left: '15px', right: '75px', pointerEvents: 'auto' }}>
               <div style={{ position: 'relative' }}>
                 <div style={{ background: 'white', borderRadius: '15px', display: 'flex', alignItems: 'center', padding: '0 15px', boxShadow: '0 4px 15px rgba(0,0,0,0.15)', height: '50px' }}>
@@ -202,9 +201,9 @@ export default function App() {
                   <input placeholder="Buscar equipe..." value={mapSearchQuery} onChange={e => setMapSearchQuery(e.target.value)} style={{ border: 'none', background: 'none', flex: 1, padding: '0 10px', fontSize: '15px', outline: 'none' }} />
                   {mapSearchQuery && <X size={18} color="#64748b" onClick={() => setMapSearchQuery('')} />}
                 </div>
-                {searchResults.length > 0 && (
+                {searchResultsMap.length > 0 && (
                   <div style={{ position: 'absolute', top: '55px', left: 0, right: 0, background: 'white', borderRadius: '15px', boxShadow: '0 8px 25px rgba(0,0,0,0.2)', overflow: 'hidden' }}>
-                    {searchResults.map(b => (
+                    {searchResultsMap.map(b => (
                       <div key={b.id} onClick={() => { setSelectedMapBoatId(b.id); setMapSearchQuery(''); }} style={{ padding: '15px', borderBottom: '1px solid #f1f5f9', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '10px' }}>
                         <div style={{ width: '8px', height: '8px', borderRadius: '50%', background: b.color }} />
                         <div style={{ flex: 1 }}><div style={{ fontWeight: 'bold', color: '#1e3a8a', fontSize: '14px' }}>{b.name}</div><div style={{ fontSize: '11px', color: '#64748b' }}>{b.category}</div></div>
@@ -213,8 +212,6 @@ export default function App() {
                   </div>
                 )}
               </div>
-
-              {/* CARD DE DETALHES (SUBSTITUI O GIGANTE) */}
               {selectedMapBoatId && (
                 <div style={{ marginTop: '10px', pointerEvents: 'auto' }}>
                   {(() => {
@@ -229,7 +226,6 @@ export default function App() {
         )}
 
         <div style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, zIndex: isTracking ? 30 : 5, overflowY: 'auto', background: (view === 'map' || isTracking) ? 'transparent' : '#f8fafc', pointerEvents: (view === 'map' || isTracking) ? 'none' : 'auto' }}>
-          
           {isTracking && (
             <div style={{ height: '100%', position: 'relative', pointerEvents: 'none' }}>
               <div style={{ position: 'absolute', top: '10px', left: '10px', right: '10px', pointerEvents: 'auto' }}>
@@ -279,7 +275,6 @@ export default function App() {
                   ))}
                 </div>
               )}
-
               {view === 'boats' && (
                 <div style={{ padding: '20px' }}>
                   <h2 onClick={() => { window._c = (window._c || 0) + 1; if (window._c >= 5) setIsAdmin(true); }}>Equipes</h2>
@@ -292,26 +287,56 @@ export default function App() {
                   ))}
                 </div>
               )}
-
               {view === 'track' && (
                 <div style={{ padding: '30px 20px' }}>
                   <div style={cardStyle}>
-                    <h2>Transmitir GPS</h2>
-                    <input placeholder="ID (ex: bra316)" value={nickname} onChange={e => setNickname(e.target.value)} style={inputStyle} />
-                    <button onClick={async () => {
-                      const nick = nickname.trim().toLowerCase();
-                      try {
-                        const res = await axios.post(`${API_URL}/api/boats/auth`, { nickname: nick });
-                        setBoatName(res.data.name);
-                        await axios.post(`${API_URL}/api/boats/${res.data.id}/take_control`, { senderId: CLIENT_ID });
-                        startTracking(res.data.id);
-                      } catch (e) { alert('ID não encontrado'); }
-                    }} style={btnStyle}>ENTRAR NO BARCO</button>
-                    {!isApp && <a href="/app.apk" download style={{ ...btnStyle, background: '#059669', textDecoration: 'none', display: 'block', textAlign: 'center', marginTop: '20px' }}>Baixar App Android</a>}
+                    <h2 style={{ marginBottom: '10px' }}>Transmitir GPS</h2>
+                    <p style={{ fontSize: '13px', color: '#64748b', marginBottom: '20px' }}>Procure o nome da sua equipe para iniciar o rastreio.</p>
+                    
+                    <div style={{ position: 'relative' }}>
+                      <div style={{ background: '#f1f5f9', borderRadius: '12px', display: 'flex', alignItems: 'center', padding: '0 15px', height: '55px', border: '1px solid #ddd' }}>
+                        <Search size={20} color="#64748b" />
+                        <input 
+                          placeholder="Digite o nome da equipe..." 
+                          value={trackSearchQuery} 
+                          onChange={e => setTrackSearchQuery(e.target.value)} 
+                          style={{ border: 'none', background: 'none', flex: 1, padding: '0 10px', fontSize: '16px', outline: 'none' }} 
+                        />
+                      </div>
+                      
+                      {searchResultsTrack.length > 0 && (
+                        <div style={{ marginTop: '10px', background: 'white', borderRadius: '15px', boxShadow: '0 4px 15px rgba(0,0,0,0.1)', overflow: 'hidden', border: '1px solid #f1f5f9' }}>
+                          {searchResultsTrack.map(b => (
+                            <div key={b.id} onClick={async () => {
+                              setBoatName(b.name);
+                              setNickname(b.nickname);
+                              setTrackSearchQuery('');
+                              try {
+                                await axios.post(`${API_URL}/api/boats/${b.id}/take_control`, { senderId: CLIENT_ID });
+                                startTracking(b.id);
+                              } catch (e) { alert('Erro ao assumir barco'); }
+                            }} style={{ padding: '15px', borderBottom: '1px solid #f1f5f9', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '12px' }}>
+                              <div style={{ width: '12px', height: '12px', borderRadius: '50%', background: b.color }} />
+                              <div style={{ flex: 1 }}>
+                                <div style={{ fontWeight: 'bold', color: '#1e3a8a' }}>{b.name}</div>
+                                <div style={{ fontSize: '11px', color: '#64748b' }}>ID: {b.nickname.toUpperCase()} • {b.category}</div>
+                              </div>
+                              <ChevronRight size={18} color="#cbd5e1" />
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+
+                    {!isApp && (
+                      <div style={{ marginTop: '40px', paddingTop: '20px', borderTop: '1px solid #f1f5f9', textAlign: 'center' }}>
+                        <a href="/app.apk" download style={{ ...btnStyle, background: '#059669', textDecoration: 'none', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px' }}><Download size={18}/> Baixar APK Android</a>
+                      </div>
+                    )}
+                    <div style={{ textAlign: 'center', marginTop: '20px', fontSize: '10px', color: '#cbd5e1' }}>{VERSION}</div>
                   </div>
                 </div>
               )}
-
               {isAdmin && view === 'admin' && (
                 <div style={{ padding: '20px' }}>
                   <h2>Painel Admin</h2>
@@ -325,12 +350,29 @@ export default function App() {
                   </div>
                 </div>
               )}
-            </div>
+            </>
           )}
         </div>
       </div>
     </div>
   );
+}
+
+function RaceClock({ startTime }) {
+  const [t, setT] = useState('');
+  useEffect(() => {
+    if (!startTime) return;
+    const i = setInterval(() => {
+      const d = Date.now() - startTime;
+      const h = Math.floor(d/3600000);
+      const m = Math.floor((d%3600000)/60000);
+      const s = Math.floor((d%60000)/1000);
+      setT(`${h}:${m.toString().padStart(2,'0')}:${s.toString().padStart(2,'0')}`);
+    }, 1000);
+    return () => clearInterval(i);
+  }, [startTime]);
+  if (!startTime) return null;
+  return <div style={{ position: 'absolute', top: 15, left: '50%', transform: 'translateX(-50%)', zIndex: 1000, background: 'rgba(30,58,138,0.9)', color: 'white', padding: '8px 15px', borderRadius: 12, fontWeight: 'bold' }}>{t}</div>;
 }
 
 function BoatDetails({ boat, pace, onClose, onAssume }) {
