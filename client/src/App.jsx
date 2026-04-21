@@ -1121,8 +1121,13 @@ export default function App() {
                         try {
                           setSyncStatus('sending');
                           const res = await axios.post(`${API_URL}/api/boats/auth`, { nickname: trimmedNickname });
-                          setBoatName(res.data.name); setBoatType(res.data.type); setAthletes(res.data.athletes || []); setExchanges(res.data.exchanges || []);
-                          setTrackingBoatId(res.data.id); trackingBoatIdRef.current = res.data.id;
+                          const data = res.data;
+                          setBoatName(data.name); 
+                          setBoatType(data.type); 
+                          setAthletes(Array.isArray(data.athletes) ? data.athletes : []); 
+                          setExchanges(Array.isArray(data.exchanges) ? data.exchanges : []);
+                          setTrackingBoatId(data.id); 
+                          trackingBoatIdRef.current = data.id;
                           setNickname(trimmedNickname);
                           setSyncStatus('idle');
                         } catch (err) { 
@@ -1139,11 +1144,11 @@ export default function App() {
                       
                       <h3 style={{ margin: '0 0 12px 0', fontSize: '16px', borderTop: '1px solid #f1f5f9', paddingTop: '20px' }}>Selecione o Trecho Atual</h3>
                       <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
-                        {exchanges.length === 0 && <p style={{ fontSize: '13px', color: '#ef4444' }}>Nenhum trecho configurado pelo capitão na aba "Barcos".</p>}
-                        {exchanges.map((ex, i) => (
+                        {(exchanges || []).length === 0 && <p style={{ fontSize: '13px', color: '#ef4444' }}>Nenhum trecho configurado. Use o modo Admin para adicionar atletas e trechos se necessário.</p>}
+                        {(exchanges || []).map((ex, i) => (
                           <button key={i} onClick={() => setSelectedExchangeIndex(i)} style={{ padding: '15px', borderRadius: '15px', textAlign: 'left', cursor: 'pointer', transition: 'all 0.2s', background: selectedExchangeIndex === i ? '#ecfdf5' : '#fff', border: selectedExchangeIndex === i ? '2px solid #10b981' : '1px solid #e2e8f0', boxShadow: selectedExchangeIndex === i ? '0 4px 12px rgba(16,185,129,0.1)' : 'none' }}>
                             <div style={{ fontWeight: 'bold', color: selectedExchangeIndex === i ? '#065f46' : '#1e293b' }}>Trecho {i + 1}</div>
-                            <div style={{ fontSize: '12px', color: '#64748b', marginTop: '4px' }}>{ex.join(', ')}</div>
+                            <div style={{ fontSize: '12px', color: '#64748b', marginTop: '4px' }}>{Array.isArray(ex) ? ex.join(', ') : ''}</div>
                           </button>
                         ))}
                       </div>
