@@ -97,7 +97,6 @@ function BoatLayer({ boats, trackingBoatId, setSelectedMapBoatId, setClusterModa
               pathOptions={{ color: b.color || '#2563eb', weight: 3, opacity: 0.6, dashArray: '5, 10' }} 
             />
           )}
-          {/* Se o barco não estiver num grupo de 1, o Marker é desenhado pelo map de grupos abaixo */}
         </React.Fragment>
       ))}
       {(groups || []).map(group => {
@@ -556,7 +555,6 @@ export default function App() {
             <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
               {(() => {
                 const filtered = (boats || []).filter(b => activeRankingCategory === 'Geral' || b.category === activeRankingCategory).sort((a, b) => (b.distance || 0) - (a.distance || 0));
-                const topDist = filtered[0]?.distance || 0;
                 return (filtered || []).map((b, i) => (
                   <div key={b.id} onClick={() => { setSelectedMapBoatId(b.id); setView('map'); }} style={{ background: 'white', padding: '15px', borderRadius: '15px', boxShadow: '0 2px 8px rgba(0,0,0,0.05)', display: 'flex', alignItems: 'center', gap: '15px', cursor: 'pointer', border: '1px solid #f1f5f9' }}>
                     <div style={{ fontSize: '20px', fontWeight: '900', color: i < 3 ? '#f59e0b' : '#94a3b8', width: '30px' }}>{i + 1}º</div>
@@ -659,6 +657,15 @@ export default function App() {
                     axios.post(`${API_URL}/api/boats/${res.data.id}/take_control`, { new_crew: [] });
                   } catch (err) { alert('Equipe não encontrada'); }
                 }} style={startBtnStyle}>Entrar</button>
+
+                {!isApp && (
+                  <div style={{ marginTop: '30px', paddingTop: '20px', borderTop: '1px solid #f1f5f9', textAlign: 'center' }}>
+                    <p style={{ fontSize: '13px', color: '#64748b', marginBottom: '15px' }}>Para rastreio em segundo plano, baixe o App Android:</p>
+                    <a href="/app.apk" download style={{ ...startBtnStyle, background: '#059669', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '10px', textDecoration: 'none' }}>
+                      <Download size={20} /> Baixar App (Android)
+                    </a>
+                  </div>
+                )}
               </div>
             ) : (
               <div style={{ textAlign: 'center' }}>
