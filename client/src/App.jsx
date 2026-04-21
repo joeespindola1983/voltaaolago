@@ -27,12 +27,11 @@ const boatIcon = (name, isMe = false, color = '#2563eb', heading = 0, isLeader =
   className: '', iconSize: [100, 70], iconAnchor: [50, 21]
 });
 
-function BoatLayer({ boats, trackingBoatId, setSelectedMapBoatId, categoryFilter, searchQuery }) {
+function BoatLayer({ boats, trackingBoatId, setSelectedMapBoatId, currentTime, categoryFilter = 'Geral', searchQuery = '' }) {
   const filtered = (boats || []).filter(b => (categoryFilter === 'Geral' || b.category === categoryFilter) && (!searchQuery || b.name.toLowerCase().includes(searchQuery.toLowerCase())));
   const active = filtered.filter(b => b.lat && b.lng);
   const categoryLeaders = {};
   (boats || []).forEach(b => { if (!categoryLeaders[b.category] || b.distance > (categoryLeaders[b.category].distance || 0)) categoryLeaders[b.category] = b; });
-
   return (
     <>
       {active.map(b => (
@@ -70,15 +69,15 @@ export default function App() {
   const [activeRankingCategory, setActiveRankingCategory] = useState('Geral');
   const [raceStartTime, setRaceStartTime] = useState(null);
   const [syncStatus, setSyncStatus] = useState('idle');
+  const [currentTime, setCurrentTime] = useState(Date.now());
   const isTrackingRef = useRef(isTracking);
   const trackingBoatIdRef = useRef(trackingBoatId);
   const watchIdRef = useRef(null);
   const lastSentRef = useRef(0);
   const wakeLockRef = useRef(null);
 
-  useEffect(() => { localStorage.setItem('vtl_view', view); }, [view]);
+  useEffect(() => { if (!isTracking) localStorage.setItem('vtl_view', view); }, [view, isTracking]);
 
-  // LOGIN ADMIN PERSISTENTE
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
     if (params.get('u') === 'admin' && params.get('p') === 'lago2026') { 
@@ -103,7 +102,6 @@ export default function App() {
     return () => { clearInterval(t); socket.off('config_updated'); socket.off('location_changed'); socket.off('control_taken'); };
   }, []);
 
-  // RECONEXÃO AUTOMÁTICA AO ABRIR O APP
   useEffect(() => {
     if (isTracking && trackingBoatId && !watchIdRef.current) {
       const b = boats.find(x => Number(x.id) === Number(trackingBoatId));
@@ -119,7 +117,6 @@ export default function App() {
       setTrackingBoatId(id); trackingBoatIdRef.current = id;
       localStorage.setItem('vtl_tracking_id', id);
       localStorage.setItem('vtl_tracking_active', 'true');
-      setView('track');
       
       const handler = async (pos) => {
         const now = Date.now();
@@ -131,7 +128,6 @@ export default function App() {
           setTimeout(() => setSyncStatus('idle'), 2000);
         }
       };
-
       if (isApp) watchIdRef.current = await Geolocation.watchPosition({ enableHighAccuracy: true }, handler);
       else watchIdRef.current = navigator.geolocation.watchPosition(handler, null, { enableHighAccuracy: true });
     } catch (e) { alert('Erro GPS'); }
@@ -146,8 +142,11 @@ export default function App() {
     window.location.reload();
   };
 
+  const currentBoat = boats.find(b => Number(b.id) === Number(trackingBoatId));
+
   return (
-    <div style={{ height: '100%', display: 'flex', flexDirection: 'column', background: '#f8fafc' }}>
+    <div style={{ height: '100%', width: '100%', display: 'flex', flexDirection: 'column', background: '#f8fafc', position: 'fixed', top: 0, left: 0 }}>
+      {/* Barra de Navegação - Esconde no Rastreio */}
       {!isTracking && (
         <nav style={{ background: '#1e3a8a', color: 'white', padding: '12px 5px', display: 'flex', justifyContent: 'space-around', zIndex: 1000 }}>
           <button onClick={() => setView('map')} style={navBtnStyle}><MapIcon size={20}/>Mapa</button>
@@ -158,37 +157,79 @@ export default function App() {
       )}
 
       <div style={{ flex: 1, position: 'relative', overflow: 'hidden' }}>
-        {view === 'map' && (
-          <div style={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
-            <MapContainer center={[-15.7942, -47.8822]} zoom={13} style={{ flex: 1 }}>
+        {/* MAPA SEMPRE NO FUNDO */}
+        {(view === 'map' || isTracking) && (
+          <div style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, zIndex: 1 }}>
+            <MapContainer center={[-15.7942, -47.8822]} zoom={13} style={{ height: '100%', width: '100%' }}>
               <TileLayer url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png" />
               <RaceClock startTime={raceStartTime} />
-              <BoatLayer boats={boats} trackingBoatId={trackingBoatId} setSelectedMapBoatId={setSelectedMapBoatId} categoryFilter={mapCategoryFilter} searchQuery={mapSearchQuery} />
-              <MapAutoZoom boats={boats} focusId={selectedMapBoatId} />
+              <BoatLayer boats={boats} trackingBoatId={trackingBoatId} setSelectedMapBoatId={setSelectedMapBoatId} currentTime={currentTime} />
+              <MapAutoZoom boats={boats} focusId={isTracking ? trackingBoatId : selectedMapBoatId} />
             </MapContainer>
-            {selectedMapBoatId && <BoatDetails boat={boats.find(b => b.id === selectedMapBoatId)} onClose={() => setSelectedMapBoatId(null)} onAssume={(b) => { setNickname(b.nickname); startTracking(b.id); }} />}
           </div>
         )}
 
-        {view === 'ranking' && (
-          <div style={{ padding: '20px', overflowY: 'auto', height: '100%' }}>
-            <h2>Classificação</h2>
-            <div style={{ display: 'flex', gap: '5px', overflowX: 'auto', marginBottom: '15px' }}>
-              {CATEGORIES.map(c => <button key={c} onClick={() => setActiveRankingCategory(c)} style={{ ...catBtnStyle, background: activeRankingCategory === c ? '#1e3a8a' : '#f1f5f9', color: activeRankingCategory === c ? '#fff' : '#64748b' }}>{c}</button>)}
-            </div>
-            {boats.filter(b => activeRankingCategory === 'Geral' || b.category === activeRankingCategory).sort((a,b) => b.distance - a.distance).map((b, i) => (
-              <div key={b.id} style={rankCardStyle}>
-                <div style={{ fontSize: '18px', fontWeight: 'bold', width: '30px' }}>{i+1}º</div>
-                <div style={{ flex: 1 }}><strong>{b.name}</strong><br/><small>{b.category}</small></div>
-                <div style={{ textAlign: 'right' }}><strong>{b.distance.toFixed(2)} km</strong></div>
+        {/* OVERLAY: TRANSMITINDO */}
+        {isTracking && (
+          <div style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, zIndex: 10, pointerEvents: 'none' }}>
+            <div style={{ position: 'absolute', top: '10px', left: '10px', right: '10px', pointerEvents: 'auto' }}>
+              <div style={{ background: 'white', padding: '15px', borderRadius: '15px', border: '2px solid #10b981', display: 'flex', justifyContent: 'space-between', alignItems: 'center', boxShadow: '0 4px 15px rgba(0,0,0,0.1)' }}>
+                <div>
+                  <div style={{ color: '#059669', fontWeight: 'bold', fontSize: '12px' }}>● TRANSMITINDO: {boatName}</div>
+                  {!raceStartTime && <div style={{ fontSize: '10px', color: '#f59e0b' }}>AGUARDANDO LARGADA...</div>}
+                </div>
+                <div style={{ textAlign: 'right' }}>
+                  <div style={{ fontSize: '20px', fontWeight: 'bold' }}>{currentBoat?.distance.toFixed(2) || '0.00'} KM</div>
+                  <div style={{ fontSize: '10px', color: syncStatus === 'sending' ? '#2563eb' : '#059669' }}>{syncStatus === 'sending' ? 'SINCRONIZANDO...' : 'SINAL OK'}</div>
+                </div>
               </div>
-            ))}
+            </div>
+            <div style={{ position: 'absolute', bottom: '20px', left: '20px', right: '20px', pointerEvents: 'auto' }}>
+              <button onClick={() => { if(confirm("Parar transmissão?")) stopTracking(); }} style={{ ...btnStyle, background: '#ef4444' }}>PARAR RASTREIO</button>
+            </div>
           </div>
         )}
 
-        {view === 'track' && (
-          <div style={{ height: '100%' }}>
-            {!isTracking ? (
+        {/* TELAS NORMAIS (MAPA INFO / RANKING / BOATS / ADMIN) */}
+        {!isTracking && (
+          <div style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, zIndex: 5, overflowY: 'auto', background: view === 'map' ? 'transparent' : '#f8fafc', pointerEvents: view === 'map' && !selectedMapBoatId ? 'none' : 'auto' }}>
+            
+            {view === 'map' && selectedMapBoatId && (
+              <div style={{ position: 'absolute', bottom: 0, left: 0, right: 0 }}>
+                <BoatDetails boat={boats.find(b => b.id === selectedMapBoatId)} onClose={() => setSelectedMapBoatId(null)} onAssume={(b) => { setNickname(b.nickname); startTracking(b.id); }} />
+              </div>
+            )}
+
+            {view === 'ranking' && (
+              <div style={{ padding: '20px' }}>
+                <h2>Classificação</h2>
+                <div style={{ display: 'flex', gap: '5px', overflowX: 'auto', marginBottom: '15px' }}>
+                  {CATEGORIES.map(c => <button key={c} onClick={() => setActiveRankingCategory(c)} style={{ ...catBtnStyle, background: activeRankingCategory === c ? '#1e3a8a' : '#f1f5f9', color: activeRankingCategory === c ? '#fff' : '#64748b' }}>{c}</button>)}
+                </div>
+                {boats.filter(b => activeRankingCategory === 'Geral' || b.category === activeRankingCategory).sort((a,b) => b.distance - a.distance).map((b, i) => (
+                  <div key={b.id} style={rankCardStyle} onClick={() => { setSelectedMapBoatId(b.id); setView('map'); }}>
+                    <div style={{ fontSize: '18px', fontWeight: 'bold', width: '30px' }}>{i+1}º</div>
+                    <div style={{ flex: 1 }}><strong>{b.name}</strong><br/><small>{b.category}</small></div>
+                    <div style={{ textAlign: 'right' }}><strong>{b.distance.toFixed(2)} km</strong></div>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {view === 'boats' && (
+              <div style={{ padding: '20px' }}>
+                <h2 onClick={() => { window._c = (window._c || 0) + 1; if (window._c >= 5) setIsAdmin(true); }}>Equipes</h2>
+                {boats.map(b => (
+                  <div key={b.id} style={rankCardStyle}>
+                    <div style={{ width: '12px', height: '12px', borderRadius: '50%', background: b.color }} />
+                    <div style={{ flex: 1 }}><strong>{b.name}</strong><br/><small>ID: {b.nickname.toUpperCase()}</small></div>
+                    <button onClick={() => { setNickname(b.nickname); setView('track'); }} style={{ padding: '5px 10px', borderRadius: '8px', border: 'none', background: '#f1f5f9' }}>Acessar</button>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {view === 'track' && (
               <div style={{ padding: '30px 20px' }}>
                 <div style={cardStyle}>
                   <h2>Transmitir GPS</h2>
@@ -202,60 +243,25 @@ export default function App() {
                       startTracking(res.data.id);
                     } catch (e) { alert('ID não encontrado'); }
                   }} style={btnStyle}>ENTRAR NO BARCO</button>
-                  {!isApp && <a href="/app.apk" download style={{ ...btnStyle, background: '#059669', textDecoration: 'none', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px', marginTop: '20px' }}><Download size={18}/> Baixar APK Android</a>}
-                </div>
-              </div>
-            ) : (
-              <div style={{ height: '100%', position: 'relative', display: 'flex', flexDirection: 'column' }}>
-                <MapContainer center={[-15.7942, -47.8822]} zoom={15} zoomControl={false} style={{ flex: 1 }}>
-                  <TileLayer url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png" />
-                  <BoatLayer boats={boats} trackingBoatId={trackingBoatId} categoryFilter="Geral" />
-                  <MapAutoZoom boats={boats} focusId={trackingBoatId} />
-                </MapContainer>
-                <div style={{ position: 'absolute', top: '10px', left: '10px', right: '10px', zIndex: 10 }}>
-                  <div style={{ background: 'white', padding: '15px', borderRadius: '15px', border: '2px solid #10b981', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                    <div>
-                      <div style={{ color: '#059669', fontWeight: 'bold', fontSize: '12px' }}>● AO VIVO: {boatName}</div>
-                      {!raceStartTime && <div style={{ fontSize: '10px', color: '#f59e0b' }}>AGUARDANDO LARGADA...</div>}
-                    </div>
-                    <div style={{ textAlign: 'right' }}>
-                      <div style={{ fontSize: '20px', fontWeight: 'bold' }}>{boats.find(b => b.id === trackingBoatId)?.distance.toFixed(2) || '0.00'} KM</div>
-                      <div style={{ fontSize: '10px', color: syncStatus === 'sending' ? '#2563eb' : '#059669' }}>{syncStatus === 'sending' ? 'SINCRONIZANDO...' : 'SINAL OK'}</div>
-                    </div>
-                  </div>
-                </div>
-                <div style={{ position: 'absolute', bottom: '20px', left: '20px', right: '20px', zIndex: 10 }}>
-                  <button onClick={() => { if(confirm("Parar transmissão?")) stopTracking(); }} style={{ ...btnStyle, background: '#ef4444' }}>PARAR RASTREIO</button>
+                  {!isApp && <a href="/app.apk" download style={{ ...btnStyle, background: '#059669', textDecoration: 'none', display: 'block', textAlign: 'center', marginTop: '20px' }}>Baixar App Android</a>}
                 </div>
               </div>
             )}
-          </div>
-        )}
 
-        {view === 'boats' && (
-          <div style={{ padding: '20px', overflowY: 'auto', height: '100%' }}>
-            <h2 onClick={() => { window._c = (window._c || 0) + 1; if (window._c >= 5) setIsAdmin(true); }}>Equipes</h2>
-            {boats.map(b => (
-              <div key={b.id} style={rankCardStyle}>
-                <div style={{ width: '12px', height: '12px', borderRadius: '50%', background: b.color }} />
-                <div style={{ flex: 1 }}><strong>{b.name}</strong><br/><small>ID: {b.nickname.toUpperCase()}</small></div>
-                <button onClick={() => { setNickname(b.nickname); setView('track'); }} style={{ padding: '5px 10px', borderRadius: '8px', border: 'none', background: '#f1f5f9' }}>Acessar</button>
+            {isAdmin && view === 'admin' && (
+              <div style={{ padding: '20px' }}>
+                <h2>Painel Admin</h2>
+                <div style={cardStyle}>
+                  {!raceStartTime ? (
+                    <button onClick={() => axios.post(`${API_URL}/api/config`, { raceStartTime: Date.now() })} style={{ ...btnStyle, background: '#10b981', marginBottom: '10px' }}>INICIAR PROVA</button>
+                  ) : (
+                    <button onClick={() => axios.post(`${API_URL}/api/config`, { raceStartTime: null })} style={{ ...btnStyle, background: '#ef4444', marginBottom: '10px' }}>RESETAR PROVA</button>
+                  )}
+                  <button onClick={() => { window.open(`${API_URL}/api/admin/export`, '_blank'); }} style={{ ...btnStyle, background: '#1e3a8a', marginBottom: '10px' }}>EXPORTAR CSV</button>
+                  <button onClick={() => { if(confirm("ZERAR TUDO?")) axios.post(`${API_URL}/api/admin/reset_all`); }} style={{ ...btnStyle, background: '#000' }}>LIMPAR BANCO</button>
+                </div>
               </div>
-            ))}
-          </div>
-        )}
-
-        {isAdmin && view === 'admin' && (
-          <div style={{ padding: '20px' }}>
-            <h2>Painel Admin</h2>
-            {!raceStartTime ? (
-              <button onClick={() => axios.post(`${API_URL}/api/config`, { raceStartTime: Date.now() })} style={{ ...btnStyle, background: '#10b981', marginBottom: '10px' }}>INICIAR PROVA</button>
-            ) : (
-              <button onClick={() => axios.post(`${API_URL}/api/config`, { raceStartTime: null })} style={{ ...btnStyle, background: '#ef4444', marginBottom: '10px' }}>RESETAR PROVA</button>
             )}
-            <button onClick={() => { window.open(`${API_URL}/api/admin/export`, '_blank'); }} style={{ ...btnStyle, background: '#1e3a8a', marginBottom: '10px' }}>EXPORTAR CSV</button>
-            <button onClick={() => { if(confirm("ZERAR TUDO?")) axios.post(`${API_URL}/api/admin/reset_all`); }} style={{ ...btnStyle, background: '#000' }}>LIMPAR BANCO</button>
-            <button onClick={() => setView('map')} style={{ ...btnStyle, background: 'none', color: '#64748b' }}>Voltar ao Mapa</button>
           </div>
         )}
       </div>
@@ -281,12 +287,12 @@ function RaceClock({ startTime }) {
 }
 
 function BoatDetails({ boat, onClose, onAssume }) {
+  if (!boat) return null;
   return (
-    <div style={{ flex: '0 0 40%', background: 'white', padding: 20, borderTop: '2px solid #ddd', overflowY: 'auto' }}>
-      <h3>{boat.name}</h3>
+    <div style={{ background: 'white', padding: 20, borderTop: '2px solid #ddd', boxShadow: '0 -4px 15px rgba(0,0,0,0.1)' }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between' }}><h3>{boat.name}</h3><X onClick={onClose}/></div>
       <p>Distância: {boat.distance.toFixed(2)} km | Bateria: {boat.battery_level}%</p>
       <button onClick={() => onAssume(boat)} style={btnStyle}>Assumir Barco</button>
-      <button onClick={onClose} style={{ ...btnStyle, background: '#64748b', marginTop: 10 }}>Fechar</button>
     </div>
   );
 }
