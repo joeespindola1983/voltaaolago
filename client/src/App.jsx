@@ -388,6 +388,14 @@ export default function App() {
     const handlePermissions = async () => {
       if (isApp) {
         try {
+          // Tenta enviar bateria inicial
+          try {
+            const info = await Device.getBatteryInfo();
+            const level = Math.round(info.batteryLevel * 100);
+            const savedId = trackingBoatIdRef.current || localStorage.getItem('vtl_boat_id');
+            if (savedId) socket.emit('update_location', { boatId: savedId, batteryLevel: level });
+          } catch (e) {}
+
           const check = await Geolocation.checkPermissions();
           if (check.location !== 'granted') {
             const status = await Geolocation.requestPermissions();
@@ -847,8 +855,14 @@ export default function App() {
             {!isRegistering ? (
               <>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
-                  <h2 style={{ margin: 0 }}>Barcos Cadastrados</h2>
-                  <button onClick={() => { setIsRegistering(true); setEditingBoatId(null); setNickname(''); setBoatName(''); setPin(''); setAthletes([]); setExchanges([]); setBoatColor('#2563eb'); }} style={{ ...startBtnStyle, width: 'auto', padding: '10px 20px' }}>+ Novo Barco</button>
+                  <h2 style={{ margin: 0 }} onClick={() => {
+                    // Clique secreto para ativar modo admin se necessário
+                    window._adminClick = (window._adminClick || 0) + 1;
+                    if (window._adminClick >= 5) { setIsAdmin(true); alert('Modo Admin Ativado'); }
+                  }}>Barcos Cadastrados</h2>
+                  {isAdmin && (
+                    <button onClick={() => { setIsRegistering(true); setEditingBoatId(null); setNickname(''); setBoatName(''); setPin(''); setAthletes([]); setExchanges([]); setBoatColor('#2563eb'); }} style={{ ...startBtnStyle, width: 'auto', padding: '10px 20px' }}>+ Novo Barco</button>
+                  )}
                 </div>
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
                   {boats.map(b => {
@@ -871,22 +885,16 @@ export default function App() {
                                 </span>
                               )}
                             </div>
-                            <div style={{ fontSize: '12px', color: '#64748b' }}>@{b.nickname} • {b.type}</div>
+                            <div style={{ fontSize: '12px', color: '#64748b' }}>ID: {b.nickname.toUpperCase()} • {b.type}</div>
                           </div>
                         </div>
-                        <div style={{ display: 'flex', gap: '8px' }}>
-                          <button onClick={() => {
-                            const text = `Acesso ao barco *${b.name}*:\nNickname: *@${b.nickname}*\nSenha: *${b.pin}*\nLink: ${window.location.origin}`;
-                            navigator.clipboard.writeText(text).then(() => alert('Dados de acesso copiados! Envie para sua equipe.'));
-                          }} style={{ background: '#f8fafc', border: '1px solid #e2e8f0', padding: '10px', borderRadius: '10px', cursor: 'pointer' }}>
-                            <RefreshCw size={16} color="#64748b" />
-                          </button>
-                          <button onClick={() => {
-                            const p = prompt('Digite a SENHA de 4 números:');
-                            if (p === b.pin) {
+                        {isAdmin && (
+                          <div style={{ display: 'flex', gap: '8px' }}>
+                            <button onClick={() => {
                               setEditingBoatId(b.id); setBoatName(b.name); setNickname(b.nickname); setPin(b.pin); setAthletes(b.athletes || []); setExchanges(b.exchanges || []); setBoatType(b.type); setBoatColor(b.color || '#2563eb'); setBoatCategory(b.category || 'Geral'); setIsRegistering(true);
-                            } else if (p !== null) alert('SENHA incorreta!');
-                          }} style={{ background: '#f1f5f9', border: 'none', padding: '10px 15px', borderRadius: '10px', fontSize: '12px', fontWeight: 'bold' }}>Gerenciar</button>                        </div>
+                            }} style={{ background: '#f1f5f9', border: 'none', padding: '10px 15px', borderRadius: '10px', fontSize: '12px', fontWeight: 'bold' }}>Editar</button>
+                          </div>
+                        )}
                       </div>
                     );
                   })}
