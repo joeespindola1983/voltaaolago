@@ -16,7 +16,7 @@ const isApp = Capacitor.isNativePlatform();
 const BACKEND_URL = 'https://voltaaolago-backend.onrender.com';
 const API_URL = BACKEND_URL; 
 const socket = io(API_URL);
-const VERSION = "v2.7.5 (Final Build)";
+const VERSION = "v2.7.6 (Admin Fix)";
 const CATEGORIES = ['Geral', 'Estreante', 'Open', '40+', '50+', '60/70+'];
 const CLIENT_ID = Math.random().toString(36).substring(7);
 
@@ -157,7 +157,7 @@ function BoatLayer({ boats, trackingBoatId, selectedMapBoatId, setSelectedMapBoa
         if (members.length === 1) {
           const boat = members[0];
           const isSelected = Number(boat.id) === Number(selectedMapBoatId) || Number(boat.id) === Number(trackingBoatId);
-          return <Marker key={boat.id} position={[boat.lat, boat.lng]} icon={boatIcon(boat.name, isSelected, boat.color, boat.heading, categoryLeaders[boat.category]?.id === b.id)} eventHandlers={{ click: () => setSelectedMapBoatId(boat.id) }} />;
+          return <Marker key={boat.id} position={[boat.lat, boat.lng]} icon={boatIcon(boat.name, isSelected, boat.color, boat.heading, categoryLeaders[boat.category]?.id === boat.id)} eventHandlers={{ click: () => setSelectedMapBoatId(boat.id) }} />;
         }
         return <Marker key={`cluster-${anchor.id}`} position={[anchor.lat, anchor.lng]} icon={clusterIcon(members.length)} eventHandlers={{ click: () => setClusterModalBoats(members) }} />;
       })}
@@ -209,6 +209,16 @@ export default function App() {
   const watchIdRef = useRef(null);
   const lastSentRef = useRef(0);
   const wakeLockRef = useRef(null);
+
+  // NOVO: LOGICA DE LOGIN ADMIN VIA URL
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    if (params.get('u') === 'admin' && params.get('p') === 'lago2026') {
+      setIsAdmin(true);
+      localStorage.setItem('vtl_admin', 'true');
+      setView('admin');
+    }
+  }, []);
 
   const requestWakeLock = async () => { if ('wakeLock' in navigator && !wakeLockRef.current) { try { wakeLockRef.current = await navigator.wakeLock.request('screen'); } catch (err) {} } };
   useEffect(() => {
@@ -275,6 +285,7 @@ export default function App() {
           <button onClick={() => setView('map')} style={navBtnStyle}><MapIcon size={20}/>Mapa</button>
           <button onClick={() => setView('ranking')} style={navBtnStyle}><Trophy size={20}/>Ranking</button>
           <button onClick={() => setView('track')} style={navBtnStyle}><Play size={20}/>Transmitir</button>
+          {isAdmin && <button onClick={() => setView('admin')} style={navBtnStyle}><Settings size={20}/>Admin</button>}
         </nav>
       )}
 
@@ -424,7 +435,7 @@ export default function App() {
                         </a>
                         <div style={{ marginTop: '12px', background: '#fffbeb', border: '1px solid #fef3c7', padding: '12px', borderRadius: '10px' }}>
                           <p style={{ margin: 0, fontSize: '11px', color: '#92400e', lineHeight: '1.4' }}>
-                            <strong>Dica de Instalação:</strong> Se o Android mostrar um aviso de segurança, clique em "Mais detalhes" e depois em "Instalar assim mesmo".
+                            <strong>Dica:</strong> No Android, se houver aviso de segurança, clique em "Mais detalhes" e depois em "Instalar assim mesmo".
                           </p>
                         </div>
                       </div>
