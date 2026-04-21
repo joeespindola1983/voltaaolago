@@ -7,7 +7,7 @@ const path = require('path');
 
 const app = express();
 
-// Build Version: 2026-04-20-22-10
+// Build Version: 2026-04-20-23-45 (Performance Mode)
 
 app.use(cors({
   origin: true,
@@ -21,13 +21,24 @@ const io = new Server(server, {
   cors: { origin: "*", methods: ["GET", "POST"] }
 });
 
-let globalRelayTimeout = 1;
 let raceStartTime = null;
+let memoBoats = []; // CACHE EM RAM PARA BLINDAR O BANCO DE DADOS
 
 const pool = new Pool({
   connectionString: 'postgresql://voltaaolago_db_user:D9QmMI4tqhLgIKqz0k6HYul0Wcm6fWVT@dpg-d7j6l89j2pic73b9n7ug-a.virginia-postgres.render.com/voltaaolago_db',
   ssl: { rejectUnauthorized: false }
 });
+
+async function refreshMemo() {
+  try {
+    const boats = (await pool.query('SELECT * FROM boats WHERE active = true ORDER BY name ASC')).rows;
+    for (let boat of boats) {
+      boat.trail = (await pool.query('SELECT lat, lng FROM location_history WHERE boat_id = $1 ORDER BY created_at DESC LIMIT 20', [boat.id])).rows.reverse();
+    }
+    memoBoats = boats;
+    console.log(`Cache atualizado: ${memoBoats.length} barcos na RAM.`);
+  } catch (err) { console.error("Cache Err:", err.message); }
+}
 
 async function initDb() {
   try {
@@ -49,6 +60,9 @@ async function initDb() {
     configRes.rows.forEach(row => {
       if (row.key === 'race_start_time') raceStartTime = row.value.val;
     });
+    
+    // PRIMEIRA CARGA NA RAM
+    await refreshMemo();
   } catch (err) { console.error("DB ERR:", err.message); }
 }
 initDb();
@@ -72,13 +86,8 @@ app.post('/api/config', async (req, res) => {
   res.json({ success: true });
 });
 
-app.get('/api/boats', async (req, res) => {
-  const boats = (await pool.query('SELECT * FROM boats WHERE active = true ORDER BY name ASC')).rows;
-  for (let boat of boats) {
-    boat.trail = (await pool.query('SELECT lat, lng FROM location_history WHERE boat_id = $1 ORDER BY created_at DESC LIMIT 30', [boat.id])).rows.reverse();
-  }
-  res.json(boats);
-});
+// ROTA BLINDADA: RESPONDE DA RAM SEM TOCAR NO BANCO
+app.get('/api/boats', (req, res) => res.json(memoBoats));
 
 app.post('/api/boats/auth', async (req, res) => {
   const result = await pool.query('SELECT * FROM boats WHERE LOWER(nickname) = LOWER($1)', [req.body.nickname]);
@@ -94,6 +103,7 @@ app.post('/api/boats/:id/take_control', async (req, res) => {
 app.post('/api/admin/reset_all', async (req, res) => {
   await pool.query('UPDATE boats SET distance = 0, speed = 0, lat = NULL, lng = NULL, sos_active = false');
   await pool.query('DELETE FROM location_history');
+  await refreshMemo();
   res.json({ success: true });
 });
 
@@ -102,22 +112,53 @@ app.get('*', (req, res) => res.sendFile(path.join(__dirname, '../client/dist/ind
 
 io.on('connection', (socket) => {
   socket.emit('config_updated', { raceStartTime });
+  
   socket.on('update_location', async (data) => {
     const { boatId, lat, lng, speed, heading, batteryLevel } = data;
     if (!boatId || !lat || !lng) return;
-    try {
-      const resBoat = await pool.query('SELECT lat, lng, distance FROM boats WHERE id = $1', [boatId]);
-      if (resBoat.rows.length === 0) return;
-      let distance = parseFloat(resBoat.rows[0].distance) || 0;
-      if (raceStartTime && resBoat.rows[0].lat) {
-        const distKm = getDistance(resBoat.rows[0].lat, resBoat.rows[0].lng, lat, lng);
-        if (distKm > 0.005 && distKm < 1.0) distance += distKm;
+
+    // ATUALIZA IMEDIATAMENTE NA RAM PARA TODOS OS USUÁRIOS
+    const now = new Date();
+    const boatIdx = memoBoats.findIndex(b => Number(b.id) === Number(boatId));
+    
+    if (boatIdx !== -1) {
+      let currentDistance = parseFloat(memoBoats[boatIdx].distance) || 0;
+      if (raceStartTime && memoBoats[boatIdx].lat) {
+        const distKm = getDistance(memoBoats[boatIdx].lat, memoBoats[boatIdx].lng, lat, lng);
+        if (distKm > 0.005 && distKm < 0.5) currentDistance += distKm;
       }
-      await pool.query('UPDATE boats SET lat = $1, lng = $2, distance = $3, speed = $4, heading = $5, battery_level = $6, last_updated = CURRENT_TIMESTAMP WHERE id = $7', [lat, lng, distance, (speed*3.6)||0, heading||0, batteryLevel||100, boatId]);
-      if (raceStartTime) await pool.query('INSERT INTO location_history (boat_id, lat, lng) VALUES ($1, $2, $3)', [boatId, lat, lng]);
-      io.emit('location_changed', { boatId, lat, lng, distance, speed:(speed*3.6)||0, heading:heading||0, batteryLevel, lastUpdated: new Date() });
-    } catch (err) { console.error('Socket Err:', err.message); }
+      
+      // Update RAM
+      memoBoats[boatIdx].lat = lat;
+      memoBoats[boatIdx].lng = lng;
+      memoBoats[boatIdx].distance = currentDistance;
+      memoBoats[boatIdx].speed = (speed * 3.6) || 0;
+      memoBoats[boatIdx].heading = heading || 0;
+      memoBoats[boatIdx].battery_level = batteryLevel || 100;
+      memoBoats[boatIdx].last_updated = now;
+      
+      // Update trail in RAM (limit 20 points)
+      if (!memoBoats[boatIdx].trail) memoBoats[boatIdx].trail = [];
+      memoBoats[boatIdx].trail.push({ lat, lng });
+      if (memoBoats[boatIdx].trail.length > 20) memoBoats[boatIdx].trail.shift();
+
+      // TRANSMITE PARA O PÚBLICO IMEDIATAMENTE DA RAM
+      io.emit('location_changed', { 
+        boatId, lat, lng, distance: currentDistance, 
+        speed: (speed * 3.6) || 0, heading: heading || 0, 
+        batteryLevel, lastUpdated: now 
+      });
+
+      // SALVA NO BANCO EM SEGUNDO PLANO (SEM BLOQUEAR O SOCKET)
+      pool.query('UPDATE boats SET lat = $1, lng = $2, distance = $3, speed = $4, heading = $5, battery_level = $6, last_updated = CURRENT_TIMESTAMP WHERE id = $7', 
+        [lat, lng, currentDistance, (speed*3.6)||0, heading||0, batteryLevel||100, boatId]
+      ).catch(e => console.error("Update DB Err:", e.message));
+
+      if (raceStartTime) {
+        pool.query('INSERT INTO location_history (boat_id, lat, lng) VALUES ($1, $2, $3)', [boatId, lat, lng]).catch(() => {});
+      }
+    }
   });
 });
 
-server.listen(process.env.PORT || 3001, () => console.log('Server OK'));
+server.listen(process.env.PORT || 3001, () => console.log('Server Performance Mode OK'));
