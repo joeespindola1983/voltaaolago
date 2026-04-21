@@ -1,8 +1,8 @@
 {
-  "id": "com.voltaaolago.app.v1",
-  "short_name": "VoltaLago",
-  "name": "Volta ao Lago 2026",
-  "description": "Rastreamento em Tempo Real - Regata Volta ao Lago",
+  "id": "com.voltaaolago.app.web.v1",
+  "short_name": "VoltaLagoWeb",
+  "name": "VoltaaoLagoWeb",
+  "description": "Acompanhamento Web - Regata Volta ao Lago 2026",
   "icons": [
     {
       "src": "icon-192.png",
@@ -29,6 +29,5 @@
   "display_override": ["standalone", "minimal-ui"],
   "background_color": "#1e3a8a",
   "theme_color": "#1e3a8a",
-  "orientation": "portrait",
-  "categories": ["sports", "navigation"]
+  "orientation": "portrait"
 }
