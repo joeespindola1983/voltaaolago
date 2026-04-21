@@ -3,7 +3,7 @@ import { io } from 'socket.io-client';
 import { MapContainer, TileLayer, Marker, Polyline, useMap, useMapEvents } from 'react-leaflet';
 import L from 'leaflet';
 import axios from 'axios';
-import { Map as MapIcon, Trophy, Ship, Play, Download, X, Battery, LogOut, Activity, Navigation, Timer, Maximize, Search, ChevronRight, WifiOff } from 'lucide-react';
+import { Map as MapIcon, Trophy, Ship, Play, Download, X, Battery, LogOut, Activity, Navigation, Timer, Maximize, Search, ChevronRight, WifiOff, Clock } from 'lucide-react';
 import { Capacitor } from '@capacitor/core';
 import { Geolocation } from '@capacitor/geolocation';
 import { Device } from '@capacitor/device';
@@ -11,25 +11,48 @@ import { NativeSettings, AndroidSettings, IOSSettings } from 'capacitor-native-s
 
 import 'leaflet/dist/leaflet.css';
 
+// --- CONFIGURAÇÕES ---
 const isApp = Capacitor.isNativePlatform();
 const BACKEND_URL = 'https://voltaaolago-backend.onrender.com';
 const API_URL = BACKEND_URL; 
 const socket = io(API_URL);
 
-const VERSION = "v2.2.1";
+const VERSION = "v2.2.9 (Slim)";
 const CATEGORIES = ['Geral', 'Estreante', 'Open', '40+', '50+', '60/70+'];
 const CLIENT_ID = Math.random().toString(36).substring(7);
 
+// --- ESTILOS ---
+const navBtnStyle = { background: 'none', border: 'none', color: 'white', display: 'flex', flexDirection: 'column', alignItems: 'center', fontSize: '10px', gap: '2px' };
+const btnStyle = { width: '100%', padding: '16px', background: '#1e3a8a', color: 'white', border: 'none', borderRadius: '12px', fontWeight: 'bold', fontSize: '16px', cursor: 'pointer' };
+const inputStyle = { width: '100%', padding: '16px', marginBottom: '15px', borderRadius: '12px', border: '1px solid #ddd', boxSizing: 'border-box' };
+const cardStyle = { background: 'white', padding: '25px', borderRadius: '25px', boxShadow: '0 4px 15px rgba(0,0,0,0.05)' };
+const rankCardStyle = { background: 'white', padding: '15px', borderRadius: '15px', display: 'flex', alignItems: 'center', gap: '15px', marginBottom: '10px', border: '1px solid #f1f5f9', cursor: 'pointer' };
+const catBtnStyle = { padding: '8px 15px', borderRadius: '20px', border: 'none', fontSize: '12px', fontWeight: 'bold', whiteSpace: 'nowrap', cursor: 'pointer' };
+const floatingBtnStyle = { background: 'white', border: 'none', borderRadius: '12px', width: '44px', height: '44px', display: 'flex', alignItems: 'center', justifyContent: 'center', boxShadow: '0 4px 15px rgba(0,0,0,0.15)', color: '#1e3a8a', cursor: 'pointer', pointerEvents: 'auto' };
+const smallTelemetryStyle = { background: '#f8fafc', padding: '8px 5px', borderRadius: '10px', display: 'flex', alignItems: 'center', gap: '4px', border: '1px solid #e2e8f0', fontSize: '13px' };
+const modalOverlayStyle = { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(0,0,0,0.5)', zIndex: 3000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '20px' };
+const modalContentStyle = { background: 'white', borderRadius: '20px', padding: '20px', width: '100%', maxWidth: '400px', boxShadow: '0 10px 25px rgba(0,0,0,0.2)' };
+const modalButtonStyle = { background: '#f1f5f9', border: 'none', padding: '15px', borderRadius: '12px', textAlign: 'left', fontSize: '16px', cursor: 'pointer', color: '#1e3a8a', display: 'flex', alignItems: 'center', justifyContent: 'space-between' };
+
 // --- COMPONENTES AUXILIARES ---
 
-const boatIcon = (name, isMe = false, color = '#2563eb', heading = 0, isLeader = false) => L.divIcon({
-  html: `<div style="display: flex; flex-direction: column; align-items: center; width: 100px;">
-          <div style="background-color: ${color}; border-radius: 50%; width: 42px; height: 42px; display: flex; align-items: center; justify-content: center; border: 3px solid ${isLeader ? '#f59e0b' : 'white'}; box-shadow: 0 4px 10px rgba(0,0,0,0.3); transition: transform 0.5s ease; transform: rotate(${heading}deg); ${isMe ? 'outline: 3px solid #10b981; outline-offset: 2px;' : ''}">
-            <svg width="26" height="26" viewBox="0 0 24 24" fill="white"><path d="M12 2L4.5 20.29L5.21 21L12 18L18.79 21L19.5 20.29L12 2Z"/></svg>
-          </div>
-          <div style="background: rgba(255,255,255,0.9); color: #1e293b; padding: 2px 6px; border-radius: 4px; font-size: 10px; font-weight: bold; margin-top: 6px; border: 1px solid #cbd5e1; white-space: nowrap;">${name}</div>
-         </div>`,
-  className: '', iconSize: [100, 70], iconAnchor: [50, 21]
+const boatIcon = (name, isSelected = false, color = '#2563eb', heading = 0, isLeader = false) => {
+  const size = 42;
+  const bgColor = isSelected ? '#10b981' : color;
+  return L.divIcon({
+    html: `<div style="display: flex; flex-direction: column; align-items: center; width: 100px;">
+            <div style="background-color: ${bgColor}; border-radius: 50%; width: ${size}px; height: ${size}px; display: flex; align-items: center; justify-content: center; border: 3px solid ${isLeader ? '#f59e0b' : 'white'}; box-shadow: 0 4px 10px rgba(0,0,0,0.3); transition: all 0.3s ease; transform: rotate(${heading}deg); ${isSelected ? 'outline: 3px solid #10b981; outline-offset: 2px;' : ''}">
+              <svg width="26" height="26" viewBox="0 0 24 24" fill="white"><path d="M12 2L4.5 20.29L5.21 21L12 18L18.79 21L19.5 20.29L12 2Z"/></svg>
+            </div>
+            <div style="background: rgba(255,255,255,0.9); color: #1e293b; padding: 2px 6px; border-radius: 4px; font-size: 10px; font-weight: bold; margin-top: 6px; border: 1px solid #cbd5e1; white-space: nowrap;">${name}</div>
+           </div>`,
+    className: '', iconSize: [100, 70], iconAnchor: [50, 21]
+  });
+};
+
+const clusterIcon = (count) => L.divIcon({
+  html: `<div style="background-color: #1e3a8a; border-radius: 50%; width: 44px; height: 44px; display: flex; align-items: center; justify-content: center; border: 4px solid white; box-shadow: 0 4px 12px rgba(0,0,0,0.5); color: white; fontWeight: bold; font-size: 16px;">${count}</div>`,
+  className: '', iconSize: [44, 44], iconAnchor: [22, 22]
 });
 
 const calculatePace = (speedKmh) => {
@@ -41,65 +64,82 @@ const calculatePace = (speedKmh) => {
 };
 
 function BoatCard({ boat, isTracking, onClose, onAssume }) {
+  const [showStatusLabel, setShowStatusLabel] = useState(false);
+  const labelTimeoutRef = useRef(null);
   if (!boat) return null;
   const pace = calculatePace(boat.speed);
-  const isOnline = (Date.now() - new Date(boat.last_updated).getTime()) / 60000 < 5;
-
+  const diffMinutes = (Date.now() - new Date(boat.last_updated).getTime()) / 60000;
+  let statusColor = '#10b981'; 
+  let statusLabel = 'Sinal OK';
+  if (diffMinutes >= 10) { statusColor = '#ef4444'; statusLabel = 'Sem sinal'; }
+  else if (diffMinutes >= 5) { statusColor = '#f59e0b'; statusLabel = 'Sinal fraco'; }
+  const lastUpdateText = boat.last_updated ? (diffMinutes < 1 ? 'agora' : `há ${Math.floor(diffMinutes)}m`) : 'nunca';
+  const handleLedClick = () => {
+    setShowStatusLabel(true);
+    if (labelTimeoutRef.current) clearTimeout(labelTimeoutRef.current);
+    labelTimeoutRef.current = setTimeout(() => setShowStatusLabel(false), 5000);
+  };
   return (
-    <div style={{ 
-      background: 'rgba(255,255,255,0.98)', 
-      padding: '12px', 
-      borderRadius: '16px', 
-      border: `2px solid ${isTracking ? '#10b981' : '#1e3a8a'}`, 
-      boxShadow: '0 8px 25px rgba(0,0,0,0.15)',
-      width: '280px',
-      pointerEvents: 'auto'
-    }}>
+    <div style={{ background: 'rgba(255,255,255,0.98)', padding: '12px', borderRadius: '16px', border: `2px solid ${isTracking ? '#10b981' : '#1e3a8a'}`, boxShadow: '0 8px 25px rgba(0,0,0,0.15)', width: '280px', pointerEvents: 'auto', position: 'relative' }}>
+      <div style={{ position: 'absolute', top: '-10px', right: '40px', display: 'flex', flexDirection: 'column', alignItems: 'flex-end', zIndex: 100 }}>
+        <div onClick={handleLedClick} style={{ width: '16px', height: '16px', borderRadius: '50%', background: statusColor, border: '2px solid white', boxShadow: '0 2px 5px rgba(0,0,0,0.2)', cursor: 'pointer', animation: diffMinutes < 5 ? 'pulse 2s infinite' : 'none' }} />
+        {showStatusLabel && <div style={{ background: '#1e293b', color: 'white', padding: '4px 8px', borderRadius: '6px', fontSize: '10px', marginTop: '5px', whiteSpace: 'nowrap', boxShadow: '0 4px 10px rgba(0,0,0,0.3)' }}>{statusLabel} • {lastUpdateText}</div>}
+      </div>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '10px' }}>
         <div style={{ flex: 1, overflow: 'hidden' }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-            <div style={{ width: '8px', height: '8px', borderRadius: '50%', background: boat.color }} />
-            <strong style={{ fontSize: '15px', color: '#1e3a8a', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', display: 'block' }}>{boat.name}</strong>
-          </div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}><div style={{ width: '8px', height: '8px', borderRadius: '50%', background: boat.color || '#2563eb' }} /><strong style={{ fontSize: '15px', color: '#1e3a8a', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', display: 'block' }}>{boat.name}</strong></div>
           <div style={{ fontSize: '10px', color: '#64748b' }}>ID: {boat.nickname?.toUpperCase()} • {boat.category}</div>
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-          <div style={{ fontSize: '10px', display: 'flex', alignItems: 'center', gap: '2px', color: boat.battery_level < 20 ? '#ef4444' : '#64748b' }}>
-            <Battery size={12}/> {boat.battery_level || '--'}%
-          </div>
+          <div style={{ fontSize: '10px', display: 'flex', alignItems: 'center', gap: '2px', color: boat.battery_level < 20 ? '#ef4444' : '#64748b' }}><Battery size={12}/> {boat.battery_level || '--'}%</div>
           {onClose && <X size={18} onClick={onClose} style={{ cursor: 'pointer', color: '#94a3b8' }} />}
         </div>
       </div>
-
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '6px' }}>
-        <div style={smallTelemetry}><Navigation size={12} color="#2563eb" /><strong>{boat.distance.toFixed(2)}</strong><small>km</small></div>
-        <div style={smallTelemetry}><Activity size={12} color="#059669" /><strong>{boat.speed?.toFixed(1) || '0.0'}</strong><small>km/h</small></div>
-        <div style={smallTelemetry}><Timer size={12} color="#f59e0b" /><strong>{pace}</strong></div>
+        <div style={smallTelemetryStyle}><Navigation size={12} color="#2563eb" /><strong>{(boat.distance || 0).toFixed(2)}</strong><small>km</small></div>
+        <div style={smallTelemetryStyle}><Activity size={12} color="#059669" /><strong>{(boat.speed || 0).toFixed(1)}</strong><small>km/h</small></div>
+        <div style={smallTelemetryStyle}><Timer size={12} color="#f59e0b" /><strong>{pace}</strong></div>
       </div>
-
-      {onAssume && (
-        <button onClick={() => onAssume(boat)} style={{ 
-          width: '100%', padding: '10px', background: '#1e3a8a', color: 'white', border: 'none', 
-          borderRadius: '10px', fontSize: '13px', fontWeight: 'bold', cursor: 'pointer', marginTop: '10px' 
-        }}>Assumir Transmissão</button>
-      )}
+      {onAssume && <button onClick={() => onAssume(boat)} style={{ ...btnStyle, padding: '10px', fontSize: '13px', marginTop: '10px' }}>Assumir Barco</button>}
     </div>
   );
 }
 
-function BoatLayer({ boats, trackingBoatId, setSelectedMapBoatId, currentTime, categoryFilter = 'Geral', searchQuery = '' }) {
+function BoatLayer({ boats, trackingBoatId, selectedMapBoatId, setSelectedMapBoatId, setClusterModalBoats, currentTime, categoryFilter = 'Geral', searchQuery = '' }) {
+  const map = useMap();
+  const [zoom, setZoom] = useState(map.getZoom());
+  useMapEvents({ zoomend: () => setZoom(map.getZoom()) });
+  const groups = [];
+  const processedIds = new Set();
   const filtered = (boats || []).filter(b => (categoryFilter === 'Geral' || b.category === categoryFilter) && (!searchQuery || b.name.toLowerCase().includes(searchQuery.toLowerCase())));
   const active = filtered.filter(b => b.lat && b.lng);
+  const clusterThreshold = 0.0004 * Math.pow(2, 16 - zoom);
+  active.forEach(b => {
+    if (processedIds.has(b.id)) return;
+    const near = active.filter(other => {
+      if (processedIds.has(other.id)) return false;
+      const dist = Math.sqrt(Math.pow(b.lat - other.lat, 2) + Math.pow(b.lng - other.lng, 2));
+      return dist < clusterThreshold;
+    });
+    near.forEach(n => processedIds.add(n.id));
+    groups.push({ anchor: b, members: near });
+  });
   const categoryLeaders = {};
   (boats || []).forEach(b => { if (!categoryLeaders[b.category] || b.distance > (categoryLeaders[b.category].distance || 0)) categoryLeaders[b.category] = b; });
   return (
     <>
       {active.map(b => (
-        <React.Fragment key={b.id}>
-          {b.trail && Array.isArray(b.trail) && b.trail.length > 1 && <Polyline positions={b.trail.map(t => [t.lat, t.lng])} pathOptions={{ color: b.color, weight: 3, opacity: 0.5, dashArray: '5, 10' }} />}
-          <Marker position={[b.lat, b.lng]} icon={boatIcon(b.name, Number(b.id) === Number(trackingBoatId), b.color, b.heading, categoryLeaders[b.category]?.id === b.id)} eventHandlers={{ click: () => setSelectedMapBoatId && setSelectedMapBoatId(b.id) }} />
-        </React.Fragment>
+        b.trail && Array.isArray(b.trail) && b.trail.length > 1 && <Polyline key={`trail-${b.id}`} positions={b.trail.map(t => [t.lat, t.lng])} pathOptions={{ color: b.color, weight: 3, opacity: 0.5, dashArray: '5, 10' }} />
       ))}
+      {groups.map(group => {
+        const { anchor, members } = group;
+        if (members.length === 1) {
+          const boat = members[0];
+          const isSelected = Number(boat.id) === Number(selectedMapBoatId) || Number(boat.id) === Number(trackingBoatId);
+          return <Marker key={boat.id} position={[boat.lat, boat.lng]} icon={boatIcon(boat.name, isSelected, boat.color, boat.heading, categoryLeaders[boat.category]?.id === boat.id)} eventHandlers={{ click: () => setSelectedMapBoatId(boat.id) }} />;
+        }
+        return <Marker key={`cluster-${anchor.id}`} position={[anchor.lat, anchor.lng]} icon={clusterIcon(members.length)} eventHandlers={{ click: () => setClusterModalBoats(members) }} />;
+      })}
     </>
   );
 }
@@ -109,7 +149,7 @@ function MapAutoZoom({ boats, focusId, fitAllTrigger }) {
   useEffect(() => {
     if (focusId) {
       const b = (boats || []).find(x => Number(x.id) === Number(focusId));
-      if (b?.lat) map.setView([b.lat, b.lng], 16, { animate: true });
+      if (b?.lat) map.panTo([b.lat, b.lng], { animate: true });
     }
   }, [boats, focusId, map]);
   useEffect(() => {
@@ -128,6 +168,7 @@ export default function App() {
   const [view, setView] = useState(() => localStorage.getItem('vtl_view') || 'map');
   const [boats, setBoats] = useState([]);
   const [selectedMapBoatId, setSelectedMapBoatId] = useState(null);
+  const [clusterModalBoats, setClusterModalBoats] = useState(null);
   const [mapCategoryFilter, setMapCategoryFilter] = useState('Geral');
   const [mapSearchQuery, setMapSearchQuery] = useState('');
   const [trackSearchQuery, setTrackSearchQuery] = useState('');
@@ -149,13 +190,6 @@ export default function App() {
 
   useEffect(() => { if (!isTracking) localStorage.setItem('vtl_view', view); }, [view, isTracking]);
 
-  useEffect(() => {
-    const params = new URLSearchParams(window.location.search);
-    if (params.get('u') === 'admin' && params.get('p') === 'lago2026') { 
-      setIsAdmin(true); localStorage.setItem('vtl_admin', 'true'); setView('admin'); 
-    }
-  }, []);
-
   const fetchBoats = async () => { try { const res = await axios.get(`${API_URL}/api/boats`); setBoats(res.data); } catch (e) {} };
 
   useEffect(() => {
@@ -174,15 +208,7 @@ export default function App() {
     return () => { clearInterval(t); clearInterval(timeT); socket.off('config_updated'); socket.off('location_changed'); socket.off('control_taken'); };
   }, []);
 
-  useEffect(() => {
-    if (isTracking && trackingBoatId && !watchIdRef.current) {
-      const b = boats.find(x => Number(x.id) === Number(trackingBoatId));
-      if (b) { setBoatName(b.name); setNickname(b.nickname); }
-      startTracking(trackingBoatId, true);
-    }
-  }, [boats]);
-
-  const startTracking = async (id, isReconnect = false) => {
+  const startTracking = async (id) => {
     try {
       if ('wakeLock' in navigator) wakeLockRef.current = await navigator.wakeLock.request('screen');
       setIsTracking(true); isTrackingRef.current = true;
@@ -215,7 +241,6 @@ export default function App() {
 
   const searchResultsMap = mapSearchQuery ? (boats || []).filter(b => b.name.toLowerCase().includes(mapSearchQuery.toLowerCase()) || b.nickname?.toLowerCase().includes(mapSearchQuery.toLowerCase())).slice(0, 5) : [];
   const searchResultsTrack = trackSearchQuery ? (boats || []).filter(b => b.name.toLowerCase().includes(trackSearchQuery.toLowerCase()) || b.nickname?.toLowerCase().includes(trackSearchQuery.toLowerCase())).slice(0, 5) : [];
-
   const currentBoat = boats.find(b => Number(b.id) === Number(trackingBoatId));
 
   return (
@@ -224,17 +249,32 @@ export default function App() {
         <nav style={{ background: '#1e3a8a', color: 'white', padding: '12px 5px', display: 'flex', justifyContent: 'space-around', zIndex: 1000 }}>
           <button onClick={() => setView('map')} style={navBtnStyle}><MapIcon size={20}/>Mapa</button>
           <button onClick={() => setView('ranking')} style={navBtnStyle}><Trophy size={20}/>Ranking</button>
-          <button onClick={() => setView('boats')} style={navBtnStyle}><Ship size={20}/>Equipes</button>
           <button onClick={() => setView('track')} style={navBtnStyle}><Play size={20}/>Transmitir</button>
         </nav>
       )}
 
       <div style={{ flex: 1, position: 'relative', overflow: 'hidden' }}>
+        {clusterModalBoats && (
+          <div style={modalOverlayStyle}>
+            <div style={modalContentStyle}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '15px' }}><h3 style={{ margin: 0 }}>Equipes nesta área</h3><button onClick={() => setClusterModalBoats(null)} style={{ background: 'none', border: 'none' }}><X size={24} /></button></div>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                {clusterModalBoats.map(b => (
+                  <button key={b.id} onClick={() => { setSelectedMapBoatId(b.id); setClusterModalBoats(null); }} style={modalButtonStyle}>
+                    <span>{b.name}</span><ChevronRight size={18}/>
+                  </button>
+                ))}
+              </div>
+            </div>
+          </div>
+        )}
+
         {(view === 'map' || isTracking) && (
           <div style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, zIndex: 1 }}>
             <MapContainer center={[-15.7942, -47.8822]} zoom={13} zoomControl={false} style={{ height: '100%', width: '100%' }}>
               <TileLayer url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png" />
-              <BoatLayer boats={boats} trackingBoatId={trackingBoatId} setSelectedMapBoatId={setSelectedMapBoatId} currentTime={currentTime} />
+              <RaceClock startTime={raceStartTime} />
+              <BoatLayer boats={boats} trackingBoatId={trackingBoatId} selectedMapBoatId={selectedMapBoatId} setSelectedMapBoatId={setSelectedMapBoatId} setClusterModalBoats={setClusterModalBoats} currentTime={currentTime} />
               <MapAutoZoom boats={boats} focusId={isTracking ? trackingBoatId : selectedMapBoatId} fitAllTrigger={fitAllTrigger} />
             </MapContainer>
           </div>
@@ -288,7 +328,7 @@ export default function App() {
             <div style={{ pointerEvents: 'auto' }}>
               {view === 'ranking' && (
                 <div style={{ padding: '20px' }}>
-                  <h2>Classificação</h2>
+                  <h2 onClick={() => { window._c = (window._c || 0) + 1; if (window._c >= 5) setIsAdmin(true); }}>Classificação</h2>
                   <div style={{ display: 'flex', gap: '5px', overflowX: 'auto', marginBottom: '15px' }}>
                     {CATEGORIES.map(c => <button key={c} onClick={() => setActiveRankingCategory(c)} style={{ ...catBtnStyle, background: activeRankingCategory === c ? '#1e3a8a' : '#f1f5f9', color: activeRankingCategory === c ? '#fff' : '#64748b' }}>{c}</button>)}
                   </div>
@@ -302,7 +342,7 @@ export default function App() {
                           <div key={b.id} style={rankCardStyle} onClick={() => { setSelectedMapBoatId(b.id); setView('map'); }}>
                             <div style={{ fontSize: '18px', fontWeight: 'bold', width: '30px' }}>{i+1}º</div>
                             <div style={{ flex: 1 }}><strong>{b.name}</strong><br/><small>{b.category}</small></div>
-                            <div style={{ textAlign: 'right' }}><strong>{b.distance.toFixed(2)} km</strong></div>
+                            <div style={{ textAlign: 'right' }}><strong>{(b.distance || 0).toFixed(2)} km</strong></div>
                           </div>
                         ))}
                         {offline.map((b) => (
@@ -317,20 +357,6 @@ export default function App() {
                   })()}
                 </div>
               )}
-
-              {view === 'boats' && (
-                <div style={{ padding: '20px' }}>
-                  <h2 onClick={() => { window._c = (window._c || 0) + 1; if (window._c >= 5) setIsAdmin(true); }}>Equipes</h2>
-                  {boats.map(b => (
-                    <div key={b.id} style={rankCardStyle}>
-                      <div style={{ width: '12px', height: '12px', borderRadius: '50%', background: b.color }} />
-                      <div style={{ flex: 1 }}><strong>{b.name}</strong><br/><small>ID: {b.nickname.toUpperCase()}</small></div>
-                      <button onClick={() => { setNickname(b.nickname); setView('track'); }} style={{ padding: '5px 10px', borderRadius: '8px', border: 'none', background: '#f1f5f9' }}>Transmitir</button>
-                    </div>
-                  ))}
-                </div>
-              )}
-
               {view === 'track' && (
                 <div style={{ padding: '30px 20px' }}>
                   <div style={cardStyle}>
@@ -399,14 +425,5 @@ function RaceClock({ startTime }) {
     return () => clearInterval(i);
   }, [startTime]);
   if (!startTime) return null;
-  return <div style={{ position: 'absolute', top: 15, left: '50%', transform: 'translateX(-50%)', zIndex: 1000, background: 'rgba(30,58,138,0.9)', color: 'white', padding: '5px 15px', borderRadius: 12, fontWeight: 'bold' }}>{t}</div>;
+  return <div style={{ position: 'absolute', top: 15, left: '50%', transform: 'translateX(-50%)', zIndex: 1000, background: 'rgba(30,58,138,0.9)', color: 'white', padding: '8px 15px', borderRadius: 12, fontWeight: 'bold' }}>{t}</div>;
 }
-
-const navBtnStyle = { background: 'none', border: 'none', color: 'white', display: 'flex', flexDirection: 'column', alignItems: 'center', fontSize: '10px', gap: '2px' };
-const btnStyle = { width: '100%', padding: '16px', background: '#1e3a8a', color: 'white', border: 'none', borderRadius: '12px', fontWeight: 'bold', fontSize: '16px', cursor: 'pointer' };
-const inputStyle = { width: '100%', padding: '16px', marginBottom: '15px', borderRadius: '12px', border: '1px solid #ddd', boxSizing: 'border-box' };
-const cardStyle = { background: 'white', padding: '25px', borderRadius: '25px', boxShadow: '0 4px 15px rgba(0,0,0,0.05)' };
-const rankCardStyle = { background: 'white', padding: '15px', borderRadius: '15px', display: 'flex', alignItems: 'center', gap: '15px', marginBottom: '10px', border: '1px solid #f1f5f9', cursor: 'pointer' };
-const catBtnStyle = { padding: '8px 15px', borderRadius: '20px', border: 'none', fontSize: '12px', fontWeight: 'bold', whiteSpace: 'nowrap', cursor: 'pointer' };
-const smallTelemetry = { background: '#f8fafc', padding: '8px 5px', borderRadius: '10px', display: 'flex', alignItems: 'center', gap: '4px', border: '1px solid #e2e8f0', fontSize: '13px' };
-const floatingBtnStyle = { background: 'white', border: 'none', borderRadius: '12px', width: '44px', height: '44px', display: 'flex', alignItems: 'center', justifyContent: 'center', boxShadow: '0 4px 15px rgba(0,0,0,0.15)', color: '#1e3a8a', cursor: 'pointer', pointerEvents: 'auto' };
