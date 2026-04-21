@@ -17,7 +17,7 @@ const isApp = Capacitor.isNativePlatform();
 const BACKEND_URL = 'https://voltaaolago-backend.onrender.com';
 const API_URL = BACKEND_URL; 
 const socket = io(API_URL);
-const VERSION = "v2.8.7 (iOS Safe Area)";
+const VERSION = "v2.8.9 (Live Clock)";
 const CATEGORIES = ['Geral', 'Estreante', 'Open', '40+', '50+', '60/70+'];
 const CLIENT_ID = Math.random().toString(36).substring(7);
 
@@ -216,6 +216,12 @@ export default function App() {
     if (params.get('u') === 'admin' && params.get('p') === 'lago2026') { setIsAdmin(true); localStorage.setItem('vtl_admin', 'true'); setView('admin'); }
   }, []);
 
+  // SINCRONIA INICIAL DE CONFIG
+  useEffect(() => {
+    const fetchConfig = async () => { try { const res = await axios.get(`${API_URL}/api/config`); setRaceStartTime(res.data.raceStartTime); } catch (e) {} };
+    fetchConfig();
+  }, []);
+
   useEffect(() => { if (isApp) StatusBar.hide().catch(() => {}); }, []);
 
   const requestWakeLock = async () => { if ('wakeLock' in navigator && !wakeLockRef.current) { try { wakeLockRef.current = await navigator.wakeLock.request('screen'); } catch (err) {} } };
@@ -307,17 +313,21 @@ export default function App() {
 
         {!isTracking && view === 'map' && (
           <div style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, zIndex: 20, pointerEvents: 'none' }}>
-            {/* SAFE AREA PARA BOTÃO MAXIMIZAR */}
             <div style={{ position: 'absolute', top: 'calc(15px + env(safe-area-inset-top))', right: '15px', pointerEvents: 'auto' }}>
               <button onClick={() => setFitAllTrigger(t => t + 1)} style={floatingBtnStyle}><Maximize size={24}/></button>
             </div>
-            {/* SAFE AREA PARA BUSCA */}
             <div style={{ position: 'absolute', top: 'calc(15px + env(safe-area-inset-top))', left: '15px', right: '75px', pointerEvents: 'auto' }}>
               <div style={{ position: 'relative' }}>
                 <div style={{ background: 'white', borderRadius: '12px', display: 'flex', alignItems: 'center', padding: '0 12px', boxShadow: '0 4px 15px rgba(0,0,0,0.1)', height: '44px' }}>
                   <Search size={16} color="#64748b" />
-                  <input placeholder="Buscar equipe..." value={mapSearchQuery} onChange={e => setMapSearchQuery(e.target.value)} style={{ border: 'none', background: 'none', flex: 1, padding: '0 8px', fontSize: '14px', outline: 'none' }} />
-                  {mapSearchQuery && <X size={16} color="#64748b" onClick={() => setMapSearchQuery('')} />}
+                  <input placeholder="Buscar equipe..." value={mapSearchQuery} 
+                    onChange={e => { 
+                      setMapSearchQuery(e.target.value); 
+                      if (selectedMapBoatId) setSelectedMapBoatId(null);
+                    }} 
+                    style={{ border: 'none', background: 'none', flex: 1, padding: '0 8px', fontSize: '14px', outline: 'none' }} 
+                  />
+                  {mapSearchQuery && <X size={16} color="#64748b" onClick={() => { setMapSearchQuery(''); setSelectedMapBoatId(null); }} />}
                 </div>
                 {searchResultsMap.length > 0 && (
                   <div style={{ position: 'absolute', top: '48px', left: 0, right: 0, background: 'white', borderRadius: '12px', boxShadow: '0 8px 25px rgba(0,0,0,0.2)', overflow: 'hidden' }}>
@@ -342,7 +352,6 @@ export default function App() {
         <div style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, zIndex: isTracking ? 30 : 5, overflowY: 'auto', background: (view === 'map' || isTracking) ? 'transparent' : '#f8fafc', pointerEvents: (view === 'map' || isTracking) ? 'none' : 'auto' }}>
           {isTracking ? (
             <div style={{ height: '100%', position: 'relative', pointerEvents: 'none' }}>
-              {/* SAFE AREA PARA TELEMETRIA AO VIVO */}
               <div style={{ position: 'absolute', top: 'calc(10px + env(safe-area-inset-top))', left: '10px', right: '10px', pointerEvents: 'auto', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '10px' }}>
                 <BoatCard boat={currentBoat} isTracking={true} />
                 {showBgInfo && (
@@ -419,7 +428,6 @@ export default function App() {
                         </div>
                       )}
                     </div>
-                    
                     {!isApp && (
                       <div style={{ marginTop: '30px', borderTop: '1px solid #f1f5f9', paddingTop: '20px' }}>
                         <a href="/app.apk" download style={{ ...btnStyle, background: '#059669', textDecoration: 'none', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px' }}><Download size={20} /> Baixar App Android</a>
@@ -466,16 +474,15 @@ function RaceClock({ startTime }) {
   const [t, setT] = useState('');
   useEffect(() => {
     if (!startTime) return;
-    const i = setInterval(() => {
+    const update = () => {
       const d = Date.now() - startTime;
       const h = Math.floor(d/3600000);
       const m = Math.floor((d%3600000)/60000);
-      setT(`${h}:${m.toString().padStart(2,'0')}`);
-    }, 10000);
-    const d = Date.now() - startTime;
-    const h = Math.floor(d/3600000);
-    const m = Math.floor((d%3600000)/60000);
-    setT(`${h}:${m.toString().padStart(2,'0')}`);
+      const s = Math.floor((d%60000)/1000);
+      setT(`${h}:${m.toString().padStart(2,'0')}:${s.toString().padStart(2,'0')}`);
+    };
+    update();
+    const i = setInterval(update, 1000);
     return () => clearInterval(i);
   }, [startTime]);
   if (!startTime) return null;

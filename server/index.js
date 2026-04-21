@@ -7,22 +7,17 @@ const path = require('path');
 
 const app = express();
 
-// Build Version: 2026-04-20-23-55 (Status Logic Update)
+// Build Version: 2026-04-21-01-20 (Muralha Mode)
 
-app.use(cors({
-  origin: true,
-  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
-  credentials: true
-}));
+app.use(cors({ origin: true, methods: ['GET', 'POST'], credentials: true }));
 app.use(express.json());
 
 const server = http.createServer(app);
-const io = new Server(server, {
-  cors: { origin: "*", methods: ["GET", "POST"] }
-});
+const io = new Server(server, { cors: { origin: "*" } });
 
 let raceStartTime = null;
 let memoBoats = []; 
+let lastDbSave = {}; // Controle de tempo para não inundar o banco
 
 const pool = new Pool({
   connectionString: 'postgresql://voltaaolago_db_user:D9QmMI4tqhLgIKqz0k6HYul0Wcm6fWVT@dpg-d7j6l89j2pic73b9n7ug-a.virginia-postgres.render.com/voltaaolago_db',
@@ -36,6 +31,7 @@ async function refreshMemo() {
       boat.trail = (await pool.query('SELECT lat, lng FROM location_history WHERE boat_id = $1 ORDER BY created_at DESC LIMIT 20', [boat.id])).rows.reverse();
     }
     memoBoats = boats;
+    console.log(`RAM Shield: ${memoBoats.length} barcos carregados.`);
   } catch (err) { console.error("Cache Err:", err.message); }
 }
 
@@ -52,8 +48,8 @@ async function initDb() {
         sos_active BOOLEAN DEFAULT false, last_updated TIMESTAMP DEFAULT CURRENT_TIMESTAMP
       );
     `);
-    await client.query(`CREATE TABLE IF NOT EXISTS location_history (id SERIAL PRIMARY KEY, boat_id INTEGER REFERENCES boats(id) ON DELETE CASCADE, lat DOUBLE PRECISION, lng DOUBLE PRECISION, created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP);`);
     await client.query(`CREATE TABLE IF NOT EXISTS global_config (key VARCHAR(50) PRIMARY KEY, value JSONB);`);
+    await client.query(`CREATE TABLE IF NOT EXISTS location_history (id SERIAL PRIMARY KEY, boat_id INTEGER REFERENCES boats(id) ON DELETE CASCADE, lat DOUBLE PRECISION, lng DOUBLE PRECISION, created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP);`);
     client.release();
     const configRes = await pool.query('SELECT * FROM global_config');
     configRes.rows.forEach(row => { if (row.key === 'race_start_time') raceStartTime = row.value.val; });
@@ -101,7 +97,6 @@ app.get('*', (req, res) => res.sendFile(path.join(__dirname, '../client/dist/ind
 io.on('connection', (socket) => {
   socket.emit('config_updated', { raceStartTime });
   
-  // EVENTO PARA FORÇAR OFFLINE IMEDIATO
   socket.on('stop_tracking', async (data) => {
     const { boatId } = data;
     const boatIdx = memoBoats.findIndex(b => Number(b.id) === Number(boatId));
@@ -116,7 +111,7 @@ io.on('connection', (socket) => {
   socket.on('update_location', async (data) => {
     const { boatId, lat, lng, speed, heading, batteryLevel } = data;
     if (!boatId || !lat || !lng) return;
-    const now = new Date();
+    const now = Date.now();
     const boatIdx = memoBoats.findIndex(b => Number(b.id) === Number(boatId));
     
     if (boatIdx !== -1) {
@@ -126,28 +121,38 @@ io.on('connection', (socket) => {
         if (distKm > 0.005 && distKm < 0.5) currentDistance += distKm;
       }
       
-      memoBoats[boatIdx].lat = lat; memoBoats[boatIdx].lng = lng;
+      // ATUALIZA MEMÓRIA (VIVO NA TELA)
+      memoBoats[boatIdx].lat = lat;
+      memoBoats[boatIdx].lng = lng;
       memoBoats[boatIdx].distance = currentDistance;
       memoBoats[boatIdx].speed = (speed * 3.6) || 0;
       memoBoats[boatIdx].heading = heading || 0;
       memoBoats[boatIdx].battery_level = batteryLevel || 100;
-      memoBoats[boatIdx].last_updated = now;
+      memoBoats[boatIdx].last_updated = new Date();
       
       if (!memoBoats[boatIdx].trail) memoBoats[boatIdx].trail = [];
       memoBoats[boatIdx].trail.push({ lat, lng });
       if (memoBoats[boatIdx].trail.length > 20) memoBoats[boatIdx].trail.shift();
 
+      // TRANSMITE VIA SOCKET (REAIS 60 USUÁRIOS VÊEM O BARCO ANDAR)
       io.emit('location_changed', { 
         boatId, lat, lng, distance: currentDistance, 
         speed: (speed * 3.6) || 0, heading: heading || 0, 
-        batteryLevel, lastUpdated: now 
+        batteryLevel, lastUpdated: memoBoats[boatIdx].last_updated 
       });
 
-      pool.query('UPDATE boats SET lat = $1, lng = $2, distance = $3, speed = $4, heading = $5, battery_level = $6, last_updated = CURRENT_TIMESTAMP WHERE id = $7', 
-        [lat, lng, currentDistance, (speed*3.6)||0, heading||0, batteryLevel||100, boatId]
-      ).catch(() => {});
+      // BLINDAGEM DO BANCO: SÓ GRAVA NO POSTGRES A CADA 60 SEGUNDOS
+      const lastSave = lastDbSave[boatId] || 0;
+      if (now - lastSave > 60000) {
+        lastDbSave[boatId] = now;
+        pool.query('UPDATE boats SET lat = $1, lng = $2, distance = $3, speed = $4, heading = $5, battery_level = $6, last_updated = CURRENT_TIMESTAMP WHERE id = $7', 
+          [lat, lng, currentDistance, (speed*3.6)||0, heading||0, batteryLevel||100, boatId]
+        ).catch(() => {});
 
-      if (raceStartTime) pool.query('INSERT INTO location_history (boat_id, lat, lng) VALUES ($1, $2, $3)', [boatId, lat, lng]).catch(() => {});
+        if (raceStartTime) {
+          pool.query('INSERT INTO location_history (boat_id, lat, lng) VALUES ($1, $2, $3)', [boatId, lat, lng]).catch(() => {});
+        }
+      }
     }
   });
 });
