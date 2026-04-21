@@ -3,7 +3,7 @@ import { io } from 'socket.io-client';
 import { MapContainer, TileLayer, Marker, Polyline, useMap, useMapEvents } from 'react-leaflet';
 import L from 'leaflet';
 import axios from 'axios';
-import { Map as MapIcon, Trophy, Ship, Play, Download, X, Battery, LogOut } from 'lucide-react';
+import { Map as MapIcon, Trophy, Ship, Play, Download, X, Battery, LogOut, Activity, Navigation, Timer } from 'lucide-react';
 import { Capacitor } from '@capacitor/core';
 import { Geolocation } from '@capacitor/geolocation';
 import { Device } from '@capacitor/device';
@@ -32,6 +32,7 @@ function BoatLayer({ boats, trackingBoatId, setSelectedMapBoatId, currentTime, c
   const active = filtered.filter(b => b.lat && b.lng);
   const categoryLeaders = {};
   (boats || []).forEach(b => { if (!categoryLeaders[b.category] || b.distance > (categoryLeaders[b.category].distance || 0)) categoryLeaders[b.category] = b; });
+
   return (
     <>
       {active.map(b => (
@@ -105,7 +106,7 @@ export default function App() {
   useEffect(() => {
     if (isTracking && trackingBoatId && !watchIdRef.current) {
       const b = boats.find(x => Number(x.id) === Number(trackingBoatId));
-      if (b) setBoatName(b.name);
+      if (b) { setBoatName(b.name); setNickname(b.nickname); }
       startTracking(trackingBoatId, true);
     }
   }, [boats]);
@@ -142,11 +143,18 @@ export default function App() {
     window.location.reload();
   };
 
+  const calculatePace = (speedKmh) => {
+    if (!speedKmh || speedKmh < 0.5) return '--:--';
+    const paceDecimal = 60 / speedKmh;
+    const mins = Math.floor(paceDecimal);
+    const secs = Math.round((paceDecimal - mins) * 60);
+    return `${mins}:${secs.toString().padStart(2, '0')}`;
+  };
+
   const currentBoat = boats.find(b => Number(b.id) === Number(trackingBoatId));
 
   return (
     <div style={{ height: '100%', width: '100%', display: 'flex', flexDirection: 'column', background: '#f8fafc', position: 'fixed', top: 0, left: 0 }}>
-      {/* Barra de Navegação - Esconde no Rastreio */}
       {!isTracking && (
         <nav style={{ background: '#1e3a8a', color: 'white', padding: '12px 5px', display: 'flex', justifyContent: 'space-around', zIndex: 1000 }}>
           <button onClick={() => setView('map')} style={navBtnStyle}><MapIcon size={20}/>Mapa</button>
@@ -157,7 +165,6 @@ export default function App() {
       )}
 
       <div style={{ flex: 1, position: 'relative', overflow: 'hidden' }}>
-        {/* MAPA SEMPRE NO FUNDO */}
         {(view === 'map' || isTracking) && (
           <div style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, zIndex: 1 }}>
             <MapContainer center={[-15.7942, -47.8822]} zoom={13} style={{ height: '100%', width: '100%' }}>
@@ -169,37 +176,57 @@ export default function App() {
           </div>
         )}
 
-        {/* OVERLAY: TRANSMITINDO */}
         {isTracking && (
           <div style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, zIndex: 10, pointerEvents: 'none' }}>
             <div style={{ position: 'absolute', top: '10px', left: '10px', right: '10px', pointerEvents: 'auto' }}>
-              <div style={{ background: 'white', padding: '15px', borderRadius: '15px', border: '2px solid #10b981', display: 'flex', justifyContent: 'space-between', alignItems: 'center', boxShadow: '0 4px 15px rgba(0,0,0,0.1)' }}>
-                <div>
-                  <div style={{ color: '#059669', fontWeight: 'bold', fontSize: '12px' }}>● TRANSMITINDO: {boatName}</div>
-                  {!raceStartTime && <div style={{ fontSize: '10px', color: '#f59e0b' }}>AGUARDANDO LARGADA...</div>}
+              <div style={{ background: 'rgba(255,255,255,0.98)', padding: '15px', borderRadius: '20px', border: '2px solid #10b981', boxShadow: '0 8px 25px rgba(0,0,0,0.2)' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '15px' }}>
+                  <div>
+                    <div style={{ color: '#059669', fontWeight: '900', fontSize: '11px', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                      <span style={{ width: '8px', height: '8px', background: '#10b981', borderRadius: '50%', animation: 'pulse 1s infinite' }}></span> TRANSMITINDO AO VIVO
+                    </div>
+                    <div style={{ fontSize: '20px', fontWeight: '900', color: '#1e3a8a' }}>{boatName}</div>
+                    <div style={{ fontSize: '12px', color: '#64748b', fontWeight: 'bold' }}>ID: {nickname.toUpperCase()}</div>
+                  </div>
+                  <div style={{ textAlign: 'right' }}>
+                    <div style={{ fontSize: '12px', display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: '4px', color: '#64748b' }}>
+                       {syncStatus === 'sending' ? 'Sincronizando...' : 'Sinal OK'} <Battery size={14} color={currentBoat?.battery_level < 20 ? '#ef4444' : '#64748b'}/> {currentBoat?.battery_level || '--'}%
+                    </div>
+                    {!raceStartTime && <div style={{ fontSize: '10px', color: '#f59e0b', fontWeight: 'bold', marginTop: '4px' }}>AGUARDANDO LARGADA</div>}
+                  </div>
                 </div>
-                <div style={{ textAlign: 'right' }}>
-                  <div style={{ fontSize: '20px', fontWeight: 'bold' }}>{currentBoat?.distance.toFixed(2) || '0.00'} KM</div>
-                  <div style={{ fontSize: '10px', color: syncStatus === 'sending' ? '#2563eb' : '#059669' }}>{syncStatus === 'sending' ? 'SINCRONIZANDO...' : 'SINAL OK'}</div>
+
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '10px' }}>
+                  <div style={telemetryCard}>
+                    <Navigation size={16} color="#2563eb" />
+                    <div><small style={telemetryLabel}>DISTÂNCIA</small><br/><strong style={telemetryValue}>{currentBoat?.distance.toFixed(2) || '0.00'}</strong><small style={unitLabel}> km</small></div>
+                  </div>
+                  <div style={telemetryCard}>
+                    <Activity size={16} color="#059669" />
+                    <div><small style={telemetryLabel}>VELOCIDADE</small><br/><strong style={telemetryValue}>{currentBoat?.speed?.toFixed(1) || '0.0'}</strong><small style={unitLabel}> km/h</small></div>
+                  </div>
+                  <div style={telemetryCard}>
+                    <Timer size={16} color="#f59e0b" />
+                    <div><small style={telemetryLabel}>PACE</small><br/><strong style={telemetryValue}>{calculatePace(currentBoat?.speed)}</strong><small style={unitLabel}> /km</small></div>
+                  </div>
                 </div>
               </div>
             </div>
-            <div style={{ position: 'absolute', bottom: '20px', left: '20px', right: '20px', pointerEvents: 'auto' }}>
-              <button onClick={() => { if(confirm("Parar transmissão?")) stopTracking(); }} style={{ ...btnStyle, background: '#ef4444' }}>PARAR RASTREIO</button>
+            <div style={{ position: 'absolute', bottom: '25px', left: '25px', right: '25px', pointerEvents: 'auto' }}>
+              <button onClick={() => { if(confirm("Parar transmissão?")) stopTracking(); }} style={{ ...btnStyle, background: '#ef4444', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '10px', height: '60px', boxShadow: '0 4px 20px rgba(239,68,68,0.4)' }}>
+                <LogOut size={22} /> PARAR RASTREIO
+              </button>
             </div>
           </div>
         )}
 
-        {/* TELAS NORMAIS (MAPA INFO / RANKING / BOATS / ADMIN) */}
         {!isTracking && (
           <div style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, zIndex: 5, overflowY: 'auto', background: view === 'map' ? 'transparent' : '#f8fafc', pointerEvents: view === 'map' && !selectedMapBoatId ? 'none' : 'auto' }}>
-            
             {view === 'map' && selectedMapBoatId && (
               <div style={{ position: 'absolute', bottom: 0, left: 0, right: 0 }}>
                 <BoatDetails boat={boats.find(b => b.id === selectedMapBoatId)} onClose={() => setSelectedMapBoatId(null)} onAssume={(b) => { setNickname(b.nickname); startTracking(b.id); }} />
               </div>
             )}
-
             {view === 'ranking' && (
               <div style={{ padding: '20px' }}>
                 <h2>Classificação</h2>
@@ -215,7 +242,6 @@ export default function App() {
                 ))}
               </div>
             )}
-
             {view === 'boats' && (
               <div style={{ padding: '20px' }}>
                 <h2 onClick={() => { window._c = (window._c || 0) + 1; if (window._c >= 5) setIsAdmin(true); }}>Equipes</h2>
@@ -228,11 +254,10 @@ export default function App() {
                 ))}
               </div>
             )}
-
             {view === 'track' && (
               <div style={{ padding: '30px 20px' }}>
                 <div style={cardStyle}>
-                  <h2>Transmitir GPS</h2>
+                  <h2 style={{ marginBottom: '20px' }}>Transmitir GPS</h2>
                   <input placeholder="ID (ex: bra316)" value={nickname} onChange={e => setNickname(e.target.value)} style={inputStyle} />
                   <button onClick={async () => {
                     const nick = nickname.trim().toLowerCase();
@@ -243,11 +268,10 @@ export default function App() {
                       startTracking(res.data.id);
                     } catch (e) { alert('ID não encontrado'); }
                   }} style={btnStyle}>ENTRAR NO BARCO</button>
-                  {!isApp && <a href="/app.apk" download style={{ ...btnStyle, background: '#059669', textDecoration: 'none', display: 'block', textAlign: 'center', marginTop: '20px' }}>Baixar App Android</a>}
+                  {!isApp && <a href="/app.apk" download style={{ ...btnStyle, background: '#059669', textDecoration: 'none', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px', marginTop: '20px' }}><Download size={18}/> Baixar App Android</a>}
                 </div>
               </div>
             )}
-
             {isAdmin && view === 'admin' && (
               <div style={{ padding: '20px' }}>
                 <h2>Painel Admin</h2>
@@ -283,7 +307,7 @@ function RaceClock({ startTime }) {
     return () => clearInterval(i);
   }, [startTime]);
   if (!startTime) return null;
-  return <div style={{ position: 'absolute', top: 15, left: '50%', transform: 'translateX(-50%)', zIndex: 1000, background: 'rgba(30,58,138,0.9)', color: 'white', padding: '5px 15px', borderRadius: 12, fontWeight: 'bold' }}>{t}</div>;
+  return <div style={{ position: 'absolute', top: 15, left: '50%', transform: 'translateX(-50%)', zIndex: 1000, background: 'rgba(30,58,138,0.9)', color: 'white', padding: '8px 15px', borderRadius: 12, fontWeight: 'bold' }}>{t}</div>;
 }
 
 function BoatDetails({ boat, onClose, onAssume }) {
@@ -303,3 +327,7 @@ const inputStyle = { width: '100%', padding: '16px', marginBottom: '15px', borde
 const cardStyle = { background: 'white', padding: '25px', borderRadius: '25px', boxShadow: '0 4px 15px rgba(0,0,0,0.05)' };
 const rankCardStyle = { background: 'white', padding: '15px', borderRadius: '15px', display: 'flex', alignItems: 'center', gap: '15px', marginBottom: '10px', border: '1px solid #f1f5f9' };
 const catBtnStyle = { padding: '8px 15px', borderRadius: '20px', border: 'none', fontSize: '12px', fontWeight: 'bold', whiteSpace: 'nowrap' };
+const telemetryCard = { background: '#f8fafc', padding: '10px', borderRadius: '12px', display: 'flex', alignItems: 'center', gap: '8px', border: '1px solid #e2e8f0' };
+const telemetryLabel = { fontSize: '9px', color: '#64748b', fontWeight: 'bold' };
+const telemetryValue = { fontSize: '18px', fontWeight: '900', color: '#1e3a8a' };
+const unitLabel = { fontSize: '10px', color: '#64748b' };
