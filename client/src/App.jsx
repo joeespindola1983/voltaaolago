@@ -90,8 +90,8 @@ function BoatLayer({ boats, trackingBoatId, setSelectedMapBoatId, setClusterModa
 
   return (
     <>
-      {active.map(b => (
-        b.trail && b.trail.length > 1 && (
+      {(active || []).map(b => (
+        b.trail && Array.isArray(b.trail) && b.trail.length > 1 && (
           <Polyline 
             key={`trail-${b.id}`} 
             positions={b.trail.map(t => [t.lat, t.lng])} 
@@ -99,7 +99,7 @@ function BoatLayer({ boats, trackingBoatId, setSelectedMapBoatId, setClusterModa
           />
         )
       ))}
-      {groups.map(group => {
+      {(groups || []).map(group => {
         const { anchor, members } = group;
         if (members.length === 1) {
           const boat = members[0];
@@ -663,7 +663,7 @@ export default function App() {
               </tr>
             </thead>
             <tbody>
-              {splits.map((s) => {
+              {(boatSplits || []).map((s) => {
                 const start = new Date(s.start_time);
                 const end = s.end_time ? new Date(s.end_time) : new Date();
                 const durationMs = end - start;
@@ -818,7 +818,7 @@ export default function App() {
                 
                 const leaderDistance = filteredBoats[0]?.distance || 0;
 
-                return filteredBoats.map((b, i) => {
+                return (filteredBoats || []).map((b, i) => {
                   const diff = (currentTime - new Date(b.last_updated).getTime()) / 60000;
                   const isOnline = b.lat && b.lng && diff < 5;
                   const gap = leaderDistance - (b.distance || 0);
@@ -1403,3 +1403,4 @@ const crewBoxStyle = { background: '#f1f5f9', padding: '10px', borderRadius: '8p
 const modalOverlayStyle = { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(0,0,0,0.5)', zIndex: 2000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '20px' };
 const modalContentStyle = { background: 'white', borderRadius: '20px', padding: '20px', width: '100%', maxWidth: '400px', boxShadow: '0 10px 25px rgba(0,0,0,0.2)' };
 const modalButtonStyle = { background: '#f1f5f9', border: 'none', padding: '15px', borderRadius: '12px', textAlign: 'left', fontSize: '16px', cursor: 'pointer', color: '#1e3a8a' };
+ };
