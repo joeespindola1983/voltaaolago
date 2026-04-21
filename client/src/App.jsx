@@ -7,6 +7,7 @@ import { Map as MapIcon, Trophy, Ship, Play, Download, X, Battery, LogOut, Activ
 import { Capacitor } from '@capacitor/core';
 import { Geolocation } from '@capacitor/geolocation';
 import { Device } from '@capacitor/device';
+import { StatusBar } from '@capacitor/status-bar';
 import { NativeSettings, AndroidSettings, IOSSettings } from 'capacitor-native-settings';
 
 import 'leaflet/dist/leaflet.css';
@@ -16,7 +17,7 @@ const isApp = Capacitor.isNativePlatform();
 const BACKEND_URL = 'https://voltaaolago-backend.onrender.com';
 const API_URL = BACKEND_URL; 
 const socket = io(API_URL);
-const VERSION = "v2.8.0 (Tactical Refined)";
+const VERSION = "v2.8.1 (Fullscreen Immersive)";
 const CATEGORIES = ['Geral', 'Estreante', 'Open', '40+', '50+', '60/70+'];
 const CLIENT_ID = Math.random().toString(36).substring(7);
 
@@ -157,7 +158,7 @@ function BoatLayer({ boats, trackingBoatId, selectedMapBoatId, setSelectedMapBoa
         if (members.length === 1) {
           const boat = members[0];
           const isSelected = Number(boat.id) === Number(selectedMapBoatId) || Number(boat.id) === Number(trackingBoatId);
-          return <Marker key={boat.id} position={[boat.lat, boat.lng]} icon={boatIcon(boat.name, isSelected, boat.color, boat.heading, categoryLeaders[boat.category]?.id === boat.id)} eventHandlers={{ click: () => setSelectedMapBoatId(boat.id) }} />;
+          return <Marker key={boat.id} position={[boat.lat, boat.lng]} icon={boatIcon(boat.name, isSelected, boat.color, boat.heading, categoryLeaders[boat.category]?.id === b.id)} eventHandlers={{ click: () => setSelectedMapBoatId(boat.id) }} />;
         }
         return <Marker key={`cluster-${anchor.id}`} position={[anchor.lat, anchor.lng]} icon={clusterIcon(members.length)} eventHandlers={{ click: () => setClusterModalBoats(members) }} />;
       })}
@@ -213,6 +214,13 @@ export default function App() {
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
     if (params.get('u') === 'admin' && params.get('p') === 'lago2026') { setIsAdmin(true); localStorage.setItem('vtl_admin', 'true'); setView('admin'); }
+  }, []);
+
+  // FULLSCREEN IMMERSIVE MODE (Hiding Android Status Bar)
+  useEffect(() => {
+    if (isApp) {
+      StatusBar.hide().catch(() => {});
+    }
   }, []);
 
   const requestWakeLock = async () => { if ('wakeLock' in navigator && !wakeLockRef.current) { try { wakeLockRef.current = await navigator.wakeLock.request('screen'); } catch (err) {} } };
