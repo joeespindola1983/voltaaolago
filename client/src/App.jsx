@@ -16,7 +16,7 @@ const isApp = Capacitor.isNativePlatform();
 const BACKEND_URL = 'https://voltaaolago-backend.onrender.com';
 const API_URL = BACKEND_URL; 
 const socket = io(API_URL);
-const VERSION = "v2.7.6 (Admin Fix)";
+const VERSION = "v2.8.0 (Tactical Refined)";
 const CATEGORIES = ['Geral', 'Estreante', 'Open', '40+', '50+', '60/70+'];
 const CLIENT_ID = Math.random().toString(36).substring(7);
 
@@ -210,14 +210,9 @@ export default function App() {
   const lastSentRef = useRef(0);
   const wakeLockRef = useRef(null);
 
-  // NOVO: LOGICA DE LOGIN ADMIN VIA URL
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
-    if (params.get('u') === 'admin' && params.get('p') === 'lago2026') {
-      setIsAdmin(true);
-      localStorage.setItem('vtl_admin', 'true');
-      setView('admin');
-    }
+    if (params.get('u') === 'admin' && params.get('p') === 'lago2026') { setIsAdmin(true); localStorage.setItem('vtl_admin', 'true'); setView('admin'); }
   }, []);
 
   const requestWakeLock = async () => { if ('wakeLock' in navigator && !wakeLockRef.current) { try { wakeLockRef.current = await navigator.wakeLock.request('screen'); } catch (err) {} } };
@@ -296,7 +291,7 @@ export default function App() {
               <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '15px' }}><h3 style={{ margin: 0 }}>Equipes nesta área</h3><button onClick={() => setClusterModalBoats(null)} style={{ background: 'none', border: 'none' }}><X size={24} /></button></div>
               <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
                 {clusterModalBoats.map(b => (
-                  <button key={b.id} onClick={() => { setSelectedMapBoatId(b.id); setClusterModalBoats(null); }} style={modalButtonStyle}>
+                  <button key={b.id} onClick={() => { setSelectedMapBoatId(null); setTimeout(() => setSelectedMapBoatId(b.id), 50); setClusterModalBoats(null); }} style={modalButtonStyle}>
                     <span>{b.name}</span><ChevronRight size={18}/>
                   </button>
                 ))}
@@ -309,10 +304,10 @@ export default function App() {
           <div style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, zIndex: 1 }}>
             <MapContainer center={[-15.7942, -47.8822]} zoom={13} zoomControl={false} style={{ height: '100%', width: '100%' }}>
               <TileLayer url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png" />
-              <RaceClock startTime={raceStartTime} />
               <BoatLayer boats={boats} trackingBoatId={trackingBoatId} selectedMapBoatId={selectedMapBoatId} setSelectedMapBoatId={setSelectedMapBoatId} setClusterModalBoats={setClusterModalBoats} currentTime={currentTime} />
               <MapAutoZoom boats={boats} focusId={isTracking ? trackingBoatId : selectedMapBoatId} fitAllTrigger={fitAllTrigger} />
             </MapContainer>
+            <RaceClock startTime={raceStartTime} />
           </div>
         )}
 
@@ -331,7 +326,7 @@ export default function App() {
                 {searchResultsMap.length > 0 && (
                   <div style={{ position: 'absolute', top: '48px', left: 0, right: 0, background: 'white', borderRadius: '12px', boxShadow: '0 8px 25px rgba(0,0,0,0.2)', overflow: 'hidden' }}>
                     {searchResultsMap.map(b => (
-                      <div key={b.id} onClick={() => { setSelectedMapBoatId(b.id); setMapSearchQuery(''); }} style={{ padding: '12px', borderBottom: '1px solid #f1f5f9', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                      <div key={b.id} onClick={() => { setSelectedMapBoatId(null); setTimeout(() => setSelectedMapBoatId(b.id), 50); setMapSearchQuery(''); }} style={{ padding: '12px', borderBottom: '1px solid #f1f5f9', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '8px' }}>
                         <div style={{ width: '8px', height: '8px', borderRadius: '50%', background: b.color }} />
                         <div style={{ flex: 1 }}><div style={{ fontWeight: 'bold', color: '#1e3a8a', fontSize: '13px' }}>{b.name}</div></div>
                       </div>
@@ -481,5 +476,5 @@ function RaceClock({ startTime }) {
     return () => clearInterval(i);
   }, [startTime]);
   if (!startTime) return null;
-  return <div style={{ position: 'absolute', top: 15, left: '50%', transform: 'translateX(-50%)', zIndex: 1000, background: 'rgba(30,58,138,0.9)', color: 'white', padding: '8px 15px', borderRadius: 12, fontWeight: 'bold' }}>{t}</div>;
+  return <div style={{ position: 'absolute', bottom: isApp ? 20 : 80, left: '50%', transform: 'translateX(-50%)', zIndex: 1000, background: 'rgba(30,58,138,0.9)', color: 'white', padding: '5px 15px', borderRadius: 12, fontWeight: 'bold', pointerEvents: 'none' }}>{t}</div>;
 }
