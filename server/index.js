@@ -7,6 +7,8 @@ const path = require('path');
 
 const app = express();
 
+// Build Version: 2026-04-20-22-10
+
 app.use(cors({
   origin: true,
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
@@ -21,7 +23,6 @@ const io = new Server(server, {
 
 let globalRelayTimeout = 1;
 let raceStartTime = null;
-let lastBroadcast = { message: '', timestamp: null };
 
 const pool = new Pool({
   connectionString: 'postgresql://voltaaolago_db_user:D9QmMI4tqhLgIKqz0k6HYul0Wcm6fWVT@dpg-d7j6l89j2pic73b9n7ug-a.virginia-postgres.render.com/voltaaolago_db',
@@ -46,7 +47,6 @@ async function initDb() {
     client.release();
     const configRes = await pool.query('SELECT * FROM global_config');
     configRes.rows.forEach(row => {
-      if (row.key === 'relay_timeout') globalRelayTimeout = row.value.val;
       if (row.key === 'race_start_time') raceStartTime = row.value.val;
     });
   } catch (err) { console.error("DB ERR:", err.message); }
@@ -61,7 +61,7 @@ function getDistance(lat1, lon1, lat2, lon2) {
   return R * (2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a))); 
 }
 
-app.get('/api/config', (req, res) => res.json({ relayTimeout: globalRelayTimeout, raceStartTime }));
+app.get('/api/config', (req, res) => res.json({ raceStartTime }));
 app.post('/api/config', async (req, res) => {
   const { raceStartTime: newStartTime } = req.body;
   if (newStartTime !== undefined) {
