@@ -214,12 +214,12 @@ app.get('/api/boats', async (req, res) => {
   }
 });
 
-// Autenticação de Barco (Nickname + PIN)
+// Autenticação de Barco (Apenas Nickname)
 app.post('/api/boats/auth', async (req, res) => {
-  const { nickname, pin } = req.body;
+  const { nickname } = req.body;
   try {
-    const result = await pool.query('SELECT * FROM boats WHERE LOWER(nickname) = LOWER($1) AND pin = $2', [nickname, pin]);
-    if (result.rows.length === 0) return res.status(401).json({ error: 'Nickname ou PIN incorretos' });
+    const result = await pool.query('SELECT * FROM boats WHERE LOWER(nickname) = LOWER($1)', [nickname]);
+    if (result.rows.length === 0) return res.status(401).json({ error: 'Equipe não encontrada. Verifique o ID (ex: BRA316).' });
     res.json(result.rows[0]);
   } catch (err) {
     res.status(500).json({ error: err.message });

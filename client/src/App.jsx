@@ -1104,38 +1104,25 @@ export default function App() {
                       <h2 style={{ margin: '0 0 5px 0' }}>Acesso ao Barco</h2>
                       <p style={{ fontSize: '13px', color: '#64748b', marginBottom: '20px' }}>Identifique seu barco para começar a transmitir.</p>
                       
-                      <label style={labelStyle}>Nickname (@id único)</label>
-                      <input placeholder="ex: oc6lago" value={nickname} onChange={e => setNickname(e.target.value)} style={inputStyle} />
-                      
-                      <label style={labelStyle}>SENHA de 4 números</label>
-                      <input 
-                        type="text" 
-                        inputMode="numeric" 
-                        pattern="[0-9]*" 
-                        maxLength={4} 
-                        placeholder="Ex: 1234" 
-                        value={pin} 
-                        onChange={e => setPin(e.target.value.replace(/[^0-9]/g, ''))} 
-                        style={inputStyle} 
-                      />
+                      <label style={labelStyle}>ID da Equipe (Nickname)</label>
+                      <input placeholder="Ex: BRA316" value={nickname} onChange={e => setNickname(e.target.value)} style={inputStyle} />
                       
                       <button onClick={async () => {
                         const trimmedNickname = nickname.trim().toLowerCase();
-                        const trimmedPin = pin.trim();
-                        if (trimmedPin.length < 4) return alert('A SENHA deve ter 4 números!');
+                        if (!trimmedNickname) return alert('Digite o ID da sua equipe!');
                         try {
                           setSyncStatus('sending');
-                          const res = await axios.post(`${API_URL}/api/boats/auth`, { nickname: trimmedNickname, pin: trimmedPin });
+                          const res = await axios.post(`${API_URL}/api/boats/auth`, { nickname: trimmedNickname });
                           setBoatName(res.data.name); setBoatType(res.data.type); setAthletes(res.data.athletes || []); setExchanges(res.data.exchanges || []);
                           setTrackingBoatId(res.data.id); trackingBoatIdRef.current = res.data.id;
-                          setNickname(trimmedNickname); setPin(trimmedPin);
+                          setNickname(trimmedNickname);
                           setSyncStatus('idle');
                         } catch (err) { 
                           setSyncStatus('error');
                           const errorMsg = err.response?.data?.error || err.message || 'Erro de conexão';
                           alert(`Erro: ${errorMsg}`); 
                         }
-                      }} style={startBtnStyle}>Verificar Credenciais</button>
+                      }} style={startBtnStyle}>Entrar no Barco</button>
                     </>
                   ) : (
                     <div style={{ textAlign: 'left' }}>
