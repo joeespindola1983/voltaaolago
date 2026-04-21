@@ -17,7 +17,7 @@ const isApp = Capacitor.isNativePlatform();
 const BACKEND_URL = 'https://voltaaolago-backend.onrender.com';
 const API_URL = BACKEND_URL; 
 const socket = io(API_URL);
-const VERSION = "v2.8.1 (Fullscreen Immersive)";
+const VERSION = "v2.8.2 (Bottom Bar)";
 const CATEGORIES = ['Geral', 'Estreante', 'Open', '40+', '50+', '60/70+'];
 const CLIENT_ID = Math.random().toString(36).substring(7);
 
@@ -158,7 +158,7 @@ function BoatLayer({ boats, trackingBoatId, selectedMapBoatId, setSelectedMapBoa
         if (members.length === 1) {
           const boat = members[0];
           const isSelected = Number(boat.id) === Number(selectedMapBoatId) || Number(boat.id) === Number(trackingBoatId);
-          return <Marker key={boat.id} position={[boat.lat, boat.lng]} icon={boatIcon(boat.name, isSelected, boat.color, boat.heading, categoryLeaders[boat.category]?.id === b.id)} eventHandlers={{ click: () => setSelectedMapBoatId(boat.id) }} />;
+          return <Marker key={boat.id} position={[boat.lat, boat.lng]} icon={boatIcon(boat.name, isSelected, boat.color, boat.heading, categoryLeaders[boat.category]?.id === boat.id)} eventHandlers={{ click: () => setSelectedMapBoatId(boat.id) }} />;
         }
         return <Marker key={`cluster-${anchor.id}`} position={[anchor.lat, anchor.lng]} icon={clusterIcon(members.length)} eventHandlers={{ click: () => setClusterModalBoats(members) }} />;
       })}
@@ -283,15 +283,6 @@ export default function App() {
 
   return (
     <div style={{ height: '100vh', width: '100vw', display: 'flex', flexDirection: 'column', background: '#f8fafc', position: 'fixed', top: 0, left: 0, overflow: 'hidden' }}>
-      {!isTracking && (
-        <nav style={{ background: '#1e3a8a', color: 'white', padding: '12px 5px', display: 'flex', justifyContent: 'space-around', zIndex: 1000 }}>
-          <button onClick={() => setView('map')} style={navBtnStyle}><MapIcon size={20}/>Mapa</button>
-          <button onClick={() => setView('ranking')} style={navBtnStyle}><Trophy size={20}/>Ranking</button>
-          <button onClick={() => setView('track')} style={navBtnStyle}><Play size={20}/>Transmitir</button>
-          {isAdmin && <button onClick={() => setView('admin')} style={navBtnStyle}><Settings size={20}/>Admin</button>}
-        </nav>
-      )}
-
       <div style={{ flex: 1, position: 'relative', overflow: 'hidden' }}>
         {clusterModalBoats && (
           <div style={modalOverlayStyle}>
@@ -465,6 +456,14 @@ export default function App() {
           )}
         </div>
       </div>
+      {!isTracking && (
+        <nav style={{ background: '#1e3a8a', color: 'white', padding: '12px 5px', paddingBottom: isApp ? '25px' : '12px', display: 'flex', justifyContent: 'space-around', zIndex: 1000, boxShadow: '0 -2px 10px rgba(0,0,0,0.1)' }}>
+          <button onClick={() => setView('map')} style={navBtnStyle}><MapIcon size={20}/>Mapa</button>
+          <button onClick={() => setView('ranking')} style={navBtnStyle}><Trophy size={20}/>Ranking</button>
+          <button onClick={() => setView('track')} style={navBtnStyle}><Play size={20}/>Transmitir</button>
+          {isAdmin && <button onClick={() => setView('admin')} style={navBtnStyle}><Settings size={20}/>Admin</button>}
+        </nav>
+      )}
       <style>{` @keyframes pulse { 0% { transform: scale(0.95); opacity: 0.7; } 50% { transform: scale(1.1); opacity: 1; } 100% { transform: scale(0.95); opacity: 0.7; } } `}</style>
     </div>
   );
@@ -478,11 +477,15 @@ function RaceClock({ startTime }) {
       const d = Date.now() - startTime;
       const h = Math.floor(d/3600000);
       const m = Math.floor((d%3600000)/60000);
-      const s = Math.floor((d%60000)/1000);
-      setT(`${h}:${m.toString().padStart(2,'0')}:${s.toString().padStart(2,'0')}`);
-    }, 1000);
+      const s = Math.floor((d%60000)/10000); // Only refresh every 10s for performance
+      setT(`${h}:${m.toString().padStart(2,'0')}`);
+    }, 10000);
+    const d = Date.now() - startTime;
+    const h = Math.floor(d/3600000);
+    const m = Math.floor((d%3600000)/60000);
+    setT(`${h}:${m.toString().padStart(2,'0')}`);
     return () => clearInterval(i);
   }, [startTime]);
   if (!startTime) return null;
-  return <div style={{ position: 'absolute', bottom: isApp ? 20 : 80, left: '50%', transform: 'translateX(-50%)', zIndex: 1000, background: 'rgba(30,58,138,0.9)', color: 'white', padding: '5px 15px', borderRadius: 12, fontWeight: 'bold', pointerEvents: 'none' }}>{t}</div>;
+  return <div style={{ position: 'absolute', bottom: isApp ? 20 : 30, left: '50%', transform: 'translateX(-50%)', zIndex: 1000, background: 'rgba(30,58,138,0.9)', color: 'white', padding: '5px 15px', borderRadius: 12, fontWeight: 'bold', pointerEvents: 'none', fontSize: '14px' }}>{t}</div>;
 }
