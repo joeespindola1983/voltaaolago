@@ -9,6 +9,7 @@ import { Geolocation } from '@capacitor/geolocation';
 import { Device } from '@capacitor/device';
 import { NativeSettings, AndroidSettings, IOSSettings } from 'capacitor-native-settings';
 
+// Version: 1.0.2 - Unified Layout Fix
 const isApp = Capacitor.isNativePlatform();
 const BACKEND_URL = 'https://voltaaolago-backend.onrender.com';
 const API_URL = isApp ? BACKEND_URL : ((window.location.hostname === 'localhost') ? 'http://localhost:3001' : BACKEND_URL);
@@ -320,7 +321,7 @@ export default function App() {
                       startTracking(res.data.id);
                     } catch (e) { alert('ID não encontrado'); }
                   }} style={btnStyle}>ENTRAR NO BARCO</button>
-                  {!isApp && <a href="/app.apk" download style={{ ...btnStyle, background: '#059669', textDecoration: 'none', display: 'block', textAlign: 'center', marginTop: '20px' }}>Baixar App Android</a>}
+                  {!isApp && <a href="/app.apk" download style={{ ...btnStyle, background: '#059669', textDecoration: 'none', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px', marginTop: '20px' }}><Download size={18}/> Baixar App Android</a>}
                 </div>
               </div>
             )}
@@ -384,4 +385,4 @@ const telemetryCard = { background: '#f8fafc', padding: '10px', borderRadius: '1
 const telemetryLabel = { fontSize: '9px', color: '#64748b', fontWeight: 'bold' };
 const telemetryValue = { fontSize: '18px', fontWeight: '900', color: '#1e3a8a' };
 const unitLabel = { fontSize: '10px', color: '#64748b' };
-const floatingBtnStyle = { background: 'white', border: 'none', borderRadius: '15px', width: '50px', height: '50px', display: 'flex', alignItems: 'center', justifyCenter: 'center', boxShadow: '0 4px 15px rgba(0,0,0,0.15)', color: '#1e3a8a', cursor: 'pointer', padding: '13px' };
+const floatingBtnStyle = { background: 'white', border: 'none', borderRadius: '15px', width: '50px', height: '50px', display: 'flex', alignItems: 'center', justifyContent: 'center', boxShadow: '0 4px 15px rgba(0,0,0,0.15)', color: '#1e3a8a', cursor: 'pointer', padding: '13px' };
