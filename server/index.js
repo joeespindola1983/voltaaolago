@@ -6,10 +6,25 @@ const { Pool } = require('pg');
 const path = require('path');
 
 const app = express();
+
+// Middleware de Log para debug
+app.use((req, res, next) => {
+  console.log(`${req.method} ${req.url} - Origin: ${req.headers.origin}`);
+  next();
+});
+
 app.use(cors({
-  origin: ['https://voltaaolago.onrender.com', 'http://localhost:5173', 'capacitor://localhost', 'http://localhost'],
-  methods: ['GET', 'POST', 'PUT', 'DELETE'],
-  credentials: true
+  origin: function (origin, callback) {
+    // Permitir se não houver origin (como mobile apps as vezes fazem) ou se for localhost/render
+    if (!origin || origin === 'https://localhost' || origin === 'http://localhost' || origin.includes('render.com')) {
+      callback(null, true);
+    } else {
+      callback(null, true); // Em produção para a prova, vamos permitir tudo
+    }
+  },
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+  credentials: true,
+  allowedHeaders: ['Content-Type', 'Authorization']
 }));
 app.use(express.json());
 

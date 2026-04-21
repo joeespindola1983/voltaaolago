@@ -17,6 +17,7 @@
     "@capacitor/splash-screen": "^8.0.1",
     "@capacitor/status-bar": "^8.0.2",
     "axios": "^1.6.8",
+    "capacitor-native-settings": "^8.1.0",
     "leaflet": "^1.9.4",
     "lucide-react": "^0.378.0",
     "react": "^18.2.0",

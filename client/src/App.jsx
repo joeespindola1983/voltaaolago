@@ -8,11 +8,12 @@ import { Map as MapIcon, Play, RefreshCw, Ship, Anchor, Users, Navigation, Activ
 import { Capacitor } from '@capacitor/core';
 import { Geolocation } from '@capacitor/geolocation';
 import { Device } from '@capacitor/device';
+import { NativeSettings, AndroidSettings, IOSSettings } from 'capacitor-native-settings';
 
 // --- CONFIGURAÇÕES ---
 const isApp = Capacitor.isNativePlatform();
 const BACKEND_URL = 'https://voltaaolago-backend.onrender.com';
-const API_URL = (window.location.hostname === 'localhost' && !isApp) ? 'http://localhost:3001' : BACKEND_URL;
+const API_URL = isApp ? BACKEND_URL : ((window.location.hostname === 'localhost') ? 'http://localhost:3001' : BACKEND_URL);
 const socket = io(API_URL);
 
 const BOAT_CATEGORIES = {
@@ -384,15 +385,34 @@ export default function App() {
   }, [selectedMapBoatId]);
 
   useEffect(() => {
-    if (isApp) {
-      Geolocation.requestPermissions().then(status => {
-        if (status.location !== 'granted') alert('O App precisa de permissão de GPS para funcionar!');
-        // No Android 11+, a permissão de background deve ser pedida separadamente ou via configurações
-        if (status.location === 'granted') {
-          console.log('Permissão de GPS concedida. Verifique se o modo "Sempre permitir" está ativo nas configurações para rastreio com tela bloqueada.');
+    const handlePermissions = async () => {
+      if (isApp) {
+        try {
+          const check = await Geolocation.checkPermissions();
+          if (check.location !== 'granted') {
+            const status = await Geolocation.requestPermissions();
+            if (status.location === 'granted') {
+              alert('GPS Ativo! Agora você será levado às configurações para ativar o modo "Sempre Permitir" (rastreio com tela bloqueada).');
+              await NativeSettings.open({
+                optionAndroid: AndroidSettings.Location,
+                optionIOS: IOSSettings.App
+              });
+            } else {
+              alert('O App precisa de permissão de GPS para funcionar! Por favor, habilite nas configurações.');
+              await NativeSettings.open({
+                optionAndroid: AndroidSettings.ApplicationDetails,
+                optionIOS: IOSSettings.App
+              });
+            }
+          }
+        } catch (err) {
+          console.error('Erro ao verificar permissões:', err);
         }
-      });
-    }
+      } else if (navigator.geolocation) {
+        navigator.geolocation.getCurrentPosition(() => {}, () => {});
+      }
+    };
+    handlePermissions();
     fetchBoats();
     fetchWaypoints();
     socket.on('config_updated', (data) => { 
@@ -970,9 +990,11 @@ export default function App() {
                 </div>
 
                 <button onClick={async () => {
-                  if (!nickname || !boatName || pin.length < 4) return alert('Nickname, Nome e SENHA (4 números) são obrigatórios!');
+                  const trimmedNickname = nickname.trim().toLowerCase();
+                  const trimmedPin = pin.trim();
+                  if (!trimmedNickname || !boatName || trimmedPin.length < 4) return alert('Nickname, Nome e SENHA (4 números) são obrigatórios!');
                   try {
-                    const payload = { name: boatName, type: boatType, nickname, pin, color: boatColor, category: boatCategory, athletes, exchanges };
+                    const payload = { name: boatName, type: boatType, nickname: trimmedNickname, pin: trimmedPin, color: boatColor, category: boatCategory, athletes, exchanges };
                     if (editingBoatId) {
                       await axios.put(`${API_URL}/api/boats/${editingBoatId}`, payload);
                     } else {
@@ -1098,12 +1120,21 @@ export default function App() {
                       />
                       
                       <button onClick={async () => {
-                        if (pin.length < 4) return alert('A SENHA deve ter 4 números!');
+                        const trimmedNickname = nickname.trim().toLowerCase();
+                        const trimmedPin = pin.trim();
+                        if (trimmedPin.length < 4) return alert('A SENHA deve ter 4 números!');
                         try {
-                          const res = await axios.post(`${API_URL}/api/boats/auth`, { nickname, pin });
+                          setSyncStatus('sending');
+                          const res = await axios.post(`${API_URL}/api/boats/auth`, { nickname: trimmedNickname, pin: trimmedPin });
                           setBoatName(res.data.name); setBoatType(res.data.type); setAthletes(res.data.athletes || []); setExchanges(res.data.exchanges || []);
                           setTrackingBoatId(res.data.id); trackingBoatIdRef.current = res.data.id;
-                        } catch (err) { alert('Credenciais inválidas!'); }
+                          setNickname(trimmedNickname); setPin(trimmedPin);
+                          setSyncStatus('idle');
+                        } catch (err) { 
+                          setSyncStatus('error');
+                          const errorMsg = err.response?.data?.error || err.message || 'Erro de conexão';
+                          alert(`Erro: ${errorMsg}`); 
+                        }
                       }} style={startBtnStyle}>Verificar Credenciais</button>
                     </>
                   ) : (
