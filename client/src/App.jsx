@@ -3,7 +3,7 @@ import { io } from 'socket.io-client';
 import { MapContainer, TileLayer, Marker, Polyline, useMap, useMapEvents } from 'react-leaflet';
 import L from 'leaflet';
 import axios from 'axios';
-import { Map as MapIcon, Trophy, Ship, Play, Download, X, Battery, LogOut, Activity, Navigation, Timer, Maximize, Search } from 'lucide-react';
+import { Map as MapIcon, Trophy, Ship, Play, Download, X, Battery, LogOut, Activity, Navigation, Timer, Maximize, Search, ChevronRight } from 'lucide-react';
 import { Capacitor } from '@capacitor/core';
 import { Geolocation } from '@capacitor/geolocation';
 import { Device } from '@capacitor/device';
@@ -14,7 +14,7 @@ const BACKEND_URL = 'https://voltaaolago-backend.onrender.com';
 const API_URL = isApp ? BACKEND_URL : ((window.location.hostname === 'localhost') ? 'http://localhost:3001' : BACKEND_URL);
 const socket = io(API_URL);
 
-const VERSION = "v2.0.1";
+const VERSION = "v2.1.0";
 const CATEGORIES = ['Geral', 'Estreante', 'Open', '40+', '50+', '60/70+'];
 const CLIENT_ID = Math.random().toString(36).substring(7);
 
@@ -53,7 +53,6 @@ function MapAutoZoom({ boats, focusId, fitAllTrigger }) {
       if (b?.lat) map.setView([b.lat, b.lng], 16, { animate: true });
     }
   }, [boats, focusId, map]);
-
   useEffect(() => {
     if (fitAllTrigger > 0) {
       const activeBoats = (boats || []).filter(b => b.lat && b.lng);
@@ -63,7 +62,6 @@ function MapAutoZoom({ boats, focusId, fitAllTrigger }) {
       }
     }
   }, [fitAllTrigger, boats, map]);
-
   return null;
 }
 
@@ -167,7 +165,6 @@ export default function App() {
 
   return (
     <div style={{ height: '100%', width: '100%', display: 'flex', flexDirection: 'column', background: '#f8fafc', position: 'fixed', top: 0, left: 0 }}>
-      {/* Barra de Navegação */}
       {!isTracking && (
         <nav style={{ background: '#1e3a8a', color: 'white', padding: '12px 5px', display: 'flex', justifyContent: 'space-around', zIndex: 1000 }}>
           <button onClick={() => setView('map')} style={navBtnStyle}><MapIcon size={20}/>Mapa</button>
@@ -178,7 +175,6 @@ export default function App() {
       )}
 
       <div style={{ flex: 1, position: 'relative', overflow: 'hidden' }}>
-        {/* Camada 1: Mapa (Sempre no fundo) */}
         {(view === 'map' || isTracking) && (
           <div style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, zIndex: 1 }}>
             <MapContainer center={[-15.7942, -47.8822]} zoom={13} zoomControl={false} style={{ height: '100%', width: '100%' }}>
@@ -190,7 +186,6 @@ export default function App() {
           </div>
         )}
 
-        {/* Camada 2: Controles do Mapa (Flutuam sobre o mapa e outras telas) */}
         {!isTracking && view === 'map' && (
           <div style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, zIndex: 20, pointerEvents: 'none' }}>
             <div style={{ position: 'absolute', top: '15px', right: '15px', pointerEvents: 'auto' }}>
@@ -218,9 +213,7 @@ export default function App() {
           </div>
         )}
 
-        {/* Camada 3: Overlays de Transmissão ou Telas do App */}
         <div style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, zIndex: isTracking ? 30 : 5, overflowY: 'auto', background: (view === 'map' || isTracking) ? 'transparent' : '#f8fafc', pointerEvents: (view === 'map' && !selectedMapBoatId) ? 'none' : 'auto' }}>
-          
           {isTracking ? (
             <div style={{ height: '100%', position: 'relative', pointerEvents: 'none' }}>
               <div style={{ position: 'absolute', top: '10px', left: '10px', right: '10px', pointerEvents: 'auto' }}>
@@ -254,7 +247,9 @@ export default function App() {
           ) : (
             <>
               {view === 'map' && selectedMapBoatId && (
-                <div style={{ position: 'absolute', bottom: 0, left: 0, right: 0 }}><BoatDetails boat={boats.find(b => b.id === selectedMapBoatId)} onClose={() => setSelectedMapBoatId(null)} onAssume={(b) => { setNickname(b.nickname); startTracking(b.id); }} /></div>
+                <div style={{ position: 'absolute', bottom: 0, left: 0, right: 0 }}>
+                  <BoatDetails boat={boats.find(b => b.id === selectedMapBoatId)} pace={calculatePace(boats.find(b => b.id === selectedMapBoatId)?.speed)} onClose={() => setSelectedMapBoatId(null)} onAssume={(b) => { setNickname(b.nickname); startTracking(b.id); }} />
+                </div>
               )}
               {view === 'ranking' && (
                 <div style={{ padding: '20px' }}>
@@ -338,28 +333,65 @@ function RaceClock({ startTime }) {
     return () => clearInterval(i);
   }, [startTime]);
   if (!startTime) return null;
-  return <div style={{ position: 'absolute', top: 15, left: '50%', transform: 'translateX(-50%)', zIndex: 1000, background: 'rgba(30,58,138,0.9)', color: 'white', padding: '5px 15px', borderRadius: 12, fontWeight: 'bold' }}>{t}</div>;
+  return <div style={{ position: 'absolute', top: 15, left: '50%', transform: 'translateX(-50%)', zIndex: 1000, background: 'rgba(30,58,138,0.9)', color: 'white', padding: '8px 15px', borderRadius: 12, fontWeight: 'bold' }}>{t}</div>;
 }
 
-function BoatDetails({ boat, onClose, onAssume }) {
+function BoatDetails({ boat, pace, onClose, onAssume }) {
   if (!boat) return null;
+  const diff = (Date.now() - new Date(boat.last_updated).getTime()) / 60000;
+  const isOnline = diff < 5;
+
   return (
-    <div style={{ background: 'white', padding: 20, borderTop: '2px solid #ddd', boxShadow: '0 -4px 15px rgba(0,0,0,0.1)', pointerEvents: 'auto' }}>
-      <div style={{ display: 'flex', justifyContent: 'space-between' }}><h3>{boat.name}</h3><X onClick={onClose} style={{ cursor: 'pointer' }}/></div>
-      <p>Distância: {boat.distance.toFixed(2)} km | Bateria: {boat.battery_level}%</p>
-      <button onClick={() => onAssume(boat)} style={btnStyle}>Assumir Barco</button>
+    <div style={{ background: 'white', padding: '25px', borderRadius: '30px 30px 0 0', boxShadow: '0 -10px 40px rgba(0,0,0,0.15)', pointerEvents: 'auto', borderTop: '4px solid #1e3a8a' }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '20px' }}>
+        <div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '4px' }}>
+            <div style={{ width: '12px', height: '12px', borderRadius: '50%', background: boat.color }} />
+            <h2 style={{ margin: 0, fontSize: '24px', color: '#1e3a8a', fontWeight: '900' }}>{boat.name}</h2>
+          </div>
+          <div style={{ display: 'flex', gap: '10px', alignItems: 'center' }}>
+            <span style={{ fontSize: '12px', background: '#f1f5f9', padding: '4px 10px', borderRadius: '20px', fontWeight: 'bold', color: '#475569' }}>{boat.category}</span>
+            <span style={{ fontSize: '11px', fontWeight: 'bold', color: isOnline ? '#059669' : '#64748b' }}>{isOnline ? '● ONLINE' : '○ OFFLINE'}</span>
+          </div>
+        </div>
+        <button onClick={onClose} style={{ background: '#f1f5f9', border: 'none', padding: '10px', borderRadius: '50%' }}><X size={20}/></button>
+      </div>
+
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '12px', marginBottom: '25px' }}>
+        <div style={telemetryCard}>
+          <Navigation size={18} color="#2563eb" />
+          <div><small style={telemetryLabel}>KM</small><br/><strong style={telemetryValue}>{boat.distance.toFixed(2)}</strong></div>
+        </div>
+        <div style={telemetryCard}>
+          <Activity size={18} color="#059669" />
+          <div><small style={telemetryLabel}>KM/H</small><br/><strong style={telemetryValue}>{boat.speed?.toFixed(1) || '0.0'}</strong></div>
+        </div>
+        <div style={telemetryCard}>
+          <Timer size={18} color="#f59e0b" />
+          <div><small style={telemetryLabel}>PACE</small><br/><strong style={telemetryValue}>{pace}</strong></div>
+        </div>
+      </div>
+
+      <div style={{ display: 'flex', gap: '10px', alignItems: 'center', marginBottom: '20px', padding: '10px', background: '#f8fafc', borderRadius: '15px' }}>
+        <Battery size={16} color={boat.battery_level < 20 ? '#ef4444' : '#64748b'} />
+        <span style={{ fontSize: '13px', color: '#475569' }}>Bateria do dispositivo: <strong>{boat.battery_level}%</strong></span>
+      </div>
+
+      <button onClick={() => onAssume(boat)} style={{ ...btnStyle, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '10px' }}>
+        Assumir Transmissão <ChevronRight size={20}/>
+      </button>
     </div>
   );
 }
 
 const navBtnStyle = { background: 'none', border: 'none', color: 'white', display: 'flex', flexDirection: 'column', alignItems: 'center', fontSize: '10px', gap: '2px' };
-const btnStyle = { width: '100%', padding: '16px', background: '#1e3a8a', color: 'white', border: 'none', borderRadius: '12px', fontWeight: 'bold', fontSize: '16px', cursor: 'pointer' };
+const btnStyle = { width: '100%', padding: '18px', background: '#1e3a8a', color: 'white', border: 'none', borderRadius: '15px', fontWeight: '900', fontSize: '16px', cursor: 'pointer' };
 const inputStyle = { width: '100%', padding: '16px', marginBottom: '15px', borderRadius: '12px', border: '1px solid #ddd', boxSizing: 'border-box' };
 const cardStyle = { background: 'white', padding: '25px', borderRadius: '25px', boxShadow: '0 4px 15px rgba(0,0,0,0.05)' };
 const rankCardStyle = { background: 'white', padding: '15px', borderRadius: '15px', display: 'flex', alignItems: 'center', gap: '15px', marginBottom: '10px', border: '1px solid #f1f5f9', cursor: 'pointer' };
 const catBtnStyle = { padding: '8px 15px', borderRadius: '20px', border: 'none', fontSize: '12px', fontWeight: 'bold', whiteSpace: 'nowrap', cursor: 'pointer' };
-const telemetryCard = { background: '#f8fafc', padding: '10px', borderRadius: '12px', display: 'flex', alignItems: 'center', gap: '8px', border: '1px solid #e2e8f0' };
-const telemetryLabel = { fontSize: '9px', color: '#64748b', fontWeight: 'bold' };
+const telemetryCard = { background: '#f8fafc', padding: '12px 8px', borderRadius: '15px', display: 'flex', alignItems: 'center', gap: '8px', border: '1px solid #e2e8f0' };
+const telemetryLabel = { fontSize: '9px', color: '#64748b', fontWeight: 'bold', textTransform: 'uppercase' };
 const telemetryValue = { fontSize: '18px', fontWeight: '900', color: '#1e3a8a' };
 const unitLabel = { fontSize: '10px', color: '#64748b' };
 const floatingBtnStyle = { background: 'white', border: 'none', borderRadius: '15px', width: '50px', height: '50px', display: 'flex', alignItems: 'center', justifyContent: 'center', boxShadow: '0 4px 15px rgba(0,0,0,0.15)', color: '#1e3a8a', cursor: 'pointer' };
