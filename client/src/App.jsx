@@ -16,9 +16,11 @@ const BACKEND_URL = 'https://voltaaolago-backend.onrender.com';
 const API_URL = BACKEND_URL; 
 const socket = io(API_URL);
 
-const VERSION = "v2.1.5";
+const VERSION = "v2.1.6";
 const CATEGORIES = ['Geral', 'Estreante', 'Open', '40+', '50+', '60/70+'];
 const CLIENT_ID = Math.random().toString(36).substring(7);
+
+// --- COMPONENTES AUXILIARES ---
 
 const boatIcon = (name, isMe = false, color = '#2563eb', heading = 0, isLeader = false) => L.divIcon({
   html: `<div style="display: flex; flex-direction: column; align-items: center; width: 100px;">
@@ -29,6 +31,61 @@ const boatIcon = (name, isMe = false, color = '#2563eb', heading = 0, isLeader =
          </div>`,
   className: '', iconSize: [100, 70], iconAnchor: [50, 21]
 });
+
+const calculatePace = (speedKmh) => {
+  if (!speedKmh || speedKmh < 0.5) return '--:--';
+  const paceDecimal = 60 / speedKmh;
+  const mins = Math.floor(paceDecimal);
+  const secs = Math.round((paceDecimal - mins) * 60);
+  return `${mins}:${secs.toString().padStart(2, '0')}`;
+};
+
+function BoatCard({ boat, isTracking, onClose, onAssume }) {
+  if (!boat) return null;
+  const pace = calculatePace(boat.speed);
+  const isOnline = (Date.now() - new Date(boat.last_updated).getTime()) / 60000 < 5;
+
+  return (
+    <div style={{ 
+      background: 'rgba(255,255,255,0.98)', 
+      padding: '12px', 
+      borderRadius: '16px', 
+      border: `2px solid ${isTracking ? '#10b981' : '#1e3a8a'}`, 
+      boxShadow: '0 8px 25px rgba(0,0,0,0.15)',
+      width: '280px',
+      pointerEvents: 'auto'
+    }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '10px' }}>
+        <div style={{ flex: 1, overflow: 'hidden' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+            <div style={{ width: '8px', height: '8px', borderRadius: '50%', background: boat.color }} />
+            <strong style={{ fontSize: '15px', color: '#1e3a8a', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', display: 'block' }}>{boat.name}</strong>
+          </div>
+          <div style={{ fontSize: '10px', color: '#64748b' }}>ID: {boat.nickname?.toUpperCase()} • {boat.category}</div>
+        </div>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+          <div style={{ fontSize: '10px', display: 'flex', alignItems: 'center', gap: '2px', color: boat.battery_level < 20 ? '#ef4444' : '#64748b' }}>
+            <Battery size={12}/> {boat.battery_level || '--'}%
+          </div>
+          {onClose && <X size={18} onClick={onClose} style={{ cursor: 'pointer', color: '#94a3b8' }} />}
+        </div>
+      </div>
+
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '6px', marginBottom: onAssume ? '10px' : '0' }}>
+        <div style={miniTelemetry}><Navigation size={12} color="#2563eb" /><div><strong>{boat.distance.toFixed(2)}</strong><small>km</small></div></div>
+        <div style={miniTelemetry}><Activity size={12} color="#059669" /><div><strong>{boat.speed?.toFixed(1) || '0.0'}</strong><small>kt</small></div></div>
+        <div style={miniTelemetry}><Timer size={12} color="#f59e0b" /><div><strong>{pace}</strong><small>/k</small></div></div>
+      </div>
+
+      {onAssume && (
+        <button onClick={() => onAssume(boat)} style={{ 
+          width: '100%', padding: '8px', background: '#1e3a8a', color: 'white', border: 'none', 
+          borderRadius: '8px', fontSize: '12px', fontWeight: 'bold', cursor: 'pointer' 
+        }}>Assumir Transmissão</button>
+      )}
+    </div>
+  );
+}
 
 function BoatLayer({ boats, trackingBoatId, setSelectedMapBoatId, currentTime, categoryFilter = 'Geral', searchQuery = '' }) {
   const filtered = (boats || []).filter(b => (categoryFilter === 'Geral' || b.category === categoryFilter) && (!searchQuery || b.name.toLowerCase().includes(searchQuery.toLowerCase())));
@@ -116,6 +173,14 @@ export default function App() {
     return () => { clearInterval(t); socket.off('config_updated'); socket.off('location_changed'); socket.off('control_taken'); };
   }, []);
 
+  useEffect(() => {
+    if (isTracking && trackingBoatId && !watchIdRef.current) {
+      const b = boats.find(x => Number(x.id) === Number(trackingBoatId));
+      if (b) { setBoatName(b.name); setNickname(b.nickname); }
+      startTracking(trackingBoatId, true);
+    }
+  }, [boats]);
+
   const startTracking = async (id) => {
     try {
       if ('wakeLock' in navigator) wakeLockRef.current = await navigator.wakeLock.request('screen');
@@ -147,14 +212,6 @@ export default function App() {
     window.location.reload();
   };
 
-  const calculatePace = (speedKmh) => {
-    if (!speedKmh || speedKmh < 0.5) return '--:--';
-    const paceDecimal = 60 / speedKmh;
-    const mins = Math.floor(paceDecimal);
-    const secs = Math.round((paceDecimal - mins) * 60);
-    return `${mins}:${secs.toString().padStart(2, '0')}`;
-  };
-
   const currentBoat = boats.find(b => Number(b.id) === Number(trackingBoatId));
   const searchResultsMap = mapSearchQuery ? (boats || []).filter(b => b.name.toLowerCase().includes(mapSearchQuery.toLowerCase()) || b.nickname?.toLowerCase().includes(mapSearchQuery.toLowerCase())).slice(0, 5) : [];
   const searchResultsTrack = trackSearchQuery ? (boats || []).filter(b => b.name.toLowerCase().includes(trackSearchQuery.toLowerCase()) || b.nickname?.toLowerCase().includes(trackSearchQuery.toLowerCase())).slice(0, 5) : [];
@@ -175,13 +232,13 @@ export default function App() {
           <div style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, zIndex: 1 }}>
             <MapContainer center={[-15.7942, -47.8822]} zoom={13} zoomControl={false} style={{ height: '100%', width: '100%' }}>
               <TileLayer url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png" />
-              <RaceClock startTime={raceStartTime} />
               <BoatLayer boats={boats} trackingBoatId={trackingBoatId} setSelectedMapBoatId={setSelectedMapBoatId} currentTime={currentTime} />
               <MapAutoZoom boats={boats} focusId={isTracking ? trackingBoatId : selectedMapBoatId} fitAllTrigger={fitAllTrigger} />
             </MapContainer>
           </div>
         )}
 
+        {/* INTERFACE DO MAPA (BUSCA + CARD) */}
         {!isTracking && view === 'map' && (
           <div style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, zIndex: 20, pointerEvents: 'none' }}>
             <div style={{ position: 'absolute', top: '15px', right: '15px', pointerEvents: 'auto' }}>
@@ -189,64 +246,42 @@ export default function App() {
             </div>
             <div style={{ position: 'absolute', top: '15px', left: '15px', right: '75px', pointerEvents: 'auto' }}>
               <div style={{ position: 'relative' }}>
-                <div style={{ background: 'white', borderRadius: '15px', display: 'flex', alignItems: 'center', padding: '0 15px', boxShadow: '0 4px 15px rgba(0,0,0,0.15)', height: '50px' }}>
-                  <Search size={18} color="#64748b" />
-                  <input placeholder="Buscar equipe..." value={mapSearchQuery} onChange={e => setMapSearchQuery(e.target.value)} style={{ border: 'none', background: 'none', flex: 1, padding: '0 10px', fontSize: '15px', outline: 'none' }} />
-                  {mapSearchQuery && <X size={18} color="#64748b" onClick={() => setMapSearchQuery('')} />}
+                <div style={{ background: 'white', borderRadius: '12px', display: 'flex', alignItems: 'center', padding: '0 12px', boxShadow: '0 4px 15px rgba(0,0,0,0.1)', height: '44px' }}>
+                  <Search size={16} color="#64748b" />
+                  <input placeholder="Buscar equipe..." value={mapSearchQuery} onChange={e => setMapSearchQuery(e.target.value)} style={{ border: 'none', background: 'none', flex: 1, padding: '0 8px', fontSize: '14px', outline: 'none' }} />
+                  {mapSearchQuery && <X size={16} color="#64748b" onClick={() => setMapSearchQuery('')} />}
                 </div>
                 {searchResultsMap.length > 0 && (
-                  <div style={{ position: 'absolute', top: '55px', left: 0, right: 0, background: 'white', borderRadius: '15px', boxShadow: '0 8px 25px rgba(0,0,0,0.2)', overflow: 'hidden' }}>
+                  <div style={{ position: 'absolute', top: '48px', left: 0, right: 0, background: 'white', borderRadius: '12px', boxShadow: '0 8px 25px rgba(0,0,0,0.15)', overflow: 'hidden' }}>
                     {searchResultsMap.map(b => (
-                      <div key={b.id} onClick={() => { setSelectedMapBoatId(b.id); setMapSearchQuery(''); }} style={{ padding: '15px', borderBottom: '1px solid #f1f5f9', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '10px' }}>
+                      <div key={b.id} onClick={() => { setSelectedMapBoatId(b.id); setMapSearchQuery(''); }} style={{ padding: '12px', borderBottom: '1px solid #f1f5f9', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '8px' }}>
                         <div style={{ width: '8px', height: '8px', borderRadius: '50%', background: b.color }} />
-                        <div style={{ flex: 1 }}><div style={{ fontWeight: 'bold', color: '#1e3a8a', fontSize: '14px' }}>{b.name}</div><div style={{ fontSize: '11px', color: '#64748b' }}>{b.category}</div></div>
+                        <div style={{ flex: 1 }}><div style={{ fontWeight: 'bold', color: '#1e3a8a', fontSize: '13px' }}>{b.name}</div></div>
                       </div>
                     ))}
                   </div>
                 )}
               </div>
               {selectedMapBoatId && (
-                <div style={{ marginTop: '10px', pointerEvents: 'auto' }}>
-                  {(() => {
-                    const boat = boats.find(b => b.id === selectedMapBoatId);
-                    if (!boat) return null;
-                    return <BoatDetails boat={boat} pace={calculatePace(boat.speed)} onClose={() => setSelectedMapBoatId(null)} onAssume={(b) => { setNickname(b.nickname); startTracking(b.id); }} />;
-                  })()}
+                <div style={{ marginTop: '8px', pointerEvents: 'auto' }}>
+                  <BoatCard boat={boats.find(b => b.id === selectedMapBoatId)} onClose={() => setSelectedMapBoatId(null)} onAssume={(b) => { setNickname(b.nickname); startTracking(b.id); }} />
                 </div>
               )}
             </div>
           </div>
         )}
 
+        {/* INTERFACE DE TRANSMISSÃO (DASHBOARD) */}
         <div style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, zIndex: isTracking ? 30 : 5, overflowY: 'auto', background: (view === 'map' || isTracking) ? 'transparent' : '#f8fafc', pointerEvents: (view === 'map' || isTracking) ? 'none' : 'auto' }}>
           {isTracking ? (
             <div style={{ height: '100%', position: 'relative', pointerEvents: 'none' }}>
-              <div style={{ position: 'absolute', top: '10px', left: '10px', right: '10px', pointerEvents: 'auto' }}>
-                <div style={{ background: 'rgba(255,255,255,0.98)', padding: '15px', borderRadius: '20px', border: '2px solid #10b981', boxShadow: '0 8px 25px rgba(0,0,0,0.2)' }}>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '15px' }}>
-                    <div>
-                      <div style={{ color: '#059669', fontWeight: '900', fontSize: '11px', display: 'flex', alignItems: 'center', gap: '4px' }}>
-                        <span style={{ width: '8px', height: '8px', background: '#10b981', borderRadius: '50%', animation: 'pulse 1s infinite' }}></span> AO VIVO
-                      </div>
-                      <div style={{ fontSize: '20px', fontWeight: '900', color: '#1e3a8a' }}>{boatName}</div>
-                      <div style={{ fontSize: '12px', color: '#64748b', fontWeight: 'bold' }}>ID: {nickname.toUpperCase()}</div>
-                    </div>
-                    <div style={{ textAlign: 'right' }}>
-                      <div style={{ fontSize: '12px', display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: '4px', color: '#64748b' }}>
-                        {syncStatus === 'sending' ? 'Sincronizando...' : 'Sinal OK'} <Battery size={14} color={currentBoat?.battery_level < 20 ? '#ef4444' : '#64748b'}/> {currentBoat?.battery_level || '--'}%
-                      </div>
-                      {!raceStartTime && <div style={{ fontSize: '10px', color: '#f59e0b', fontWeight: 'bold', marginTop: '4px' }}>AGUARDANDO LARGADA</div>}
-                    </div>
-                  </div>
-                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '10px' }}>
-                    <div style={telemetryCard}><Navigation size={16} color="#2563eb" /><div><small style={telemetryLabel}>DISTÂNCIA</small><br/><strong style={telemetryValue}>{currentBoat?.distance.toFixed(2) || '0.00'}</strong><small style={unitLabel}> km</small></div></div>
-                    <div style={telemetryCard}><Activity size={16} color="#059669" /><div><small style={telemetryLabel}>VELOCIDADE</small><br/><strong style={telemetryValue}>{currentBoat?.speed?.toFixed(1) || '0.0'}</strong><small style={unitLabel}> km/h</small></div></div>
-                    <div style={telemetryCard}><Timer size={16} color="#f59e0b" /><div><small style={telemetryLabel}>PACE</small><br/><strong style={telemetryValue}>{calculatePace(currentBoat?.speed)}</strong><small style={unitLabel}> /km</small></div></div>
-                  </div>
-                </div>
+              <div style={{ position: 'absolute', top: '10px', left: '10px', right: '10px', pointerEvents: 'auto', display: 'flex', justifyContent: 'center' }}>
+                <BoatCard boat={currentBoat} isTracking={true} />
               </div>
               <div style={{ position: 'absolute', bottom: '25px', left: '25px', right: '25px', pointerEvents: 'auto' }}>
-                <button onClick={() => { if(confirm("Parar transmissão?")) stopTracking(); }} style={{ ...btnStyle, background: '#ef4444', height: '60px', boxShadow: '0 4px 20px rgba(239,68,68,0.4)' }}>PARAR RASTREIO</button>
+                <button onClick={() => { if(confirm("Parar transmissão?")) stopTracking(); }} style={{ ...btnStyle, background: '#ef4444', height: '54px', boxShadow: '0 4px 20px rgba(239,68,68,0.4)' }}>
+                  <LogOut size={20} /> PARAR RASTREIO
+                </button>
               </div>
             </div>
           ) : (
@@ -266,6 +301,7 @@ export default function App() {
                   ))}
                 </div>
               )}
+
               {view === 'boats' && (
                 <div style={{ padding: '20px' }}>
                   <h2 onClick={() => { window._c = (window._c || 0) + 1; if (window._c >= 5) setIsAdmin(true); }}>Equipes</h2>
@@ -278,18 +314,19 @@ export default function App() {
                   ))}
                 </div>
               )}
+
               {view === 'track' && (
                 <div style={{ padding: '30px 20px' }}>
                   <div style={cardStyle}>
                     <h2>Transmitir GPS</h2>
-                    <p style={{ fontSize: '13px', color: '#64748b', marginBottom: '20px' }}>Procure o nome da sua equipe para iniciar o rastreio.</p>
+                    <p style={{ fontSize: '13px', color: '#64748b', marginBottom: '20px' }}>Selecione sua equipe abaixo:</p>
                     <div style={{ position: 'relative' }}>
                       <div style={{ background: '#f1f5f9', borderRadius: '12px', display: 'flex', alignItems: 'center', padding: '0 15px', height: '55px', border: '1px solid #ddd' }}>
                         <Search size={20} color="#64748b" />
                         <input placeholder="Digite o nome da equipe..." value={trackSearchQuery} onChange={e => setTrackSearchQuery(e.target.value)} style={{ border: 'none', background: 'none', flex: 1, padding: '0 10px', fontSize: '16px', outline: 'none' }} />
                       </div>
                       {searchResultsTrack.length > 0 && (
-                        <div style={{ marginTop: '10px', background: 'white', borderRadius: '15px', boxShadow: '0 8px 25px rgba(0,0,0,0.2)', overflow: 'hidden', border: '1px solid #f1f5f9' }}>
+                        <div style={{ marginTop: '10px', background: 'white', borderRadius: '15px', boxShadow: '0 4px 15px rgba(0,0,0,0.1)', overflow: 'hidden', border: '1px solid #f1f5f9' }}>
                           {searchResultsTrack.map(b => (
                             <div key={b.id} onClick={async () => {
                               setBoatName(b.name); setNickname(b.nickname); setTrackSearchQuery('');
@@ -311,6 +348,7 @@ export default function App() {
                   </div>
                 </div>
               )}
+
               {isAdmin && view === 'admin' && (
                 <div style={{ padding: '20px' }}>
                   <h2>Painel Admin</h2>
@@ -332,55 +370,11 @@ export default function App() {
   );
 }
 
-function RaceClock({ startTime }) {
-  const [t, setT] = useState('');
-  useEffect(() => {
-    if (!startTime) return;
-    const i = setInterval(() => {
-      const d = Date.now() - startTime;
-      const h = Math.floor(d/3600000);
-      const m = Math.floor((d%3600000)/60000);
-      const s = Math.floor((d%60000)/1000);
-      setT(`${h}:${m.toString().padStart(2,'0')}:${s.toString().padStart(2,'0')}`);
-    }, 1000);
-    return () => clearInterval(i);
-  }, [startTime]);
-  if (!startTime) return null;
-  return <div style={{ position: 'absolute', top: 15, left: '50%', transform: 'translateX(-50%)', zIndex: 1000, background: 'rgba(30,58,138,0.9)', color: 'white', padding: '8px 15px', borderRadius: 12, fontWeight: 'bold' }}>{t}</div>;
-}
-
-function BoatDetails({ boat, pace, onClose, onAssume }) {
-  if (!boat) return null;
-  const diff = (Date.now() - new Date(boat.last_updated).getTime()) / 60000;
-  const isOnline = diff < 5;
-  return (
-    <div style={{ background: 'rgba(255,255,255,0.98)', padding: '15px', borderRadius: '20px', border: '2px solid #1e3a8a', boxShadow: '0 8px 25px rgba(0,0,0,0.15)' }}>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '10px' }}>
-        <div>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}><div style={{ width: '10px', height: '10px', borderRadius: '50%', background: boat.color }} /><strong style={{ fontSize: '18px', color: '#1e3a8a' }}>{boat.name}</strong></div>
-          <div style={{ fontSize: '11px', color: '#64748b' }}>{boat.category} • {isOnline ? 'ONLINE' : 'OFFLINE'}</div>
-        </div>
-        <button onClick={onClose} style={{ background: '#f1f5f9', border: 'none', padding: '5px', borderRadius: '50%' }}><X size={18}/></button>
-      </div>
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '8px', marginBottom: '15px' }}>
-        <div style={smallTelemetry}><Navigation size={12} color="#2563eb" /><strong>{boat.distance.toFixed(2)}</strong><small>km</small></div>
-        <div style={smallTelemetry}><Activity size={12} color="#059669" /><strong>{boat.speed?.toFixed(1) || '0.0'}</strong><small>km/h</small></div>
-        <div style={smallTelemetry}><Timer size={12} color="#f59e0b" /><strong>{pace}</strong></div>
-      </div>
-      <button onClick={() => onAssume(boat)} style={{ ...btnStyle, padding: '10px', fontSize: '14px', borderRadius: '10px' }}>Assumir Barco</button>
-    </div>
-  );
-}
-
 const navBtnStyle = { background: 'none', border: 'none', color: 'white', display: 'flex', flexDirection: 'column', alignItems: 'center', fontSize: '10px', gap: '2px' };
 const btnStyle = { width: '100%', padding: '16px', background: '#1e3a8a', color: 'white', border: 'none', borderRadius: '12px', fontWeight: 'bold', fontSize: '16px', cursor: 'pointer' };
 const inputStyle = { width: '100%', padding: '16px', marginBottom: '15px', borderRadius: '12px', border: '1px solid #ddd', boxSizing: 'border-box' };
 const cardStyle = { background: 'white', padding: '25px', borderRadius: '25px', boxShadow: '0 4px 15px rgba(0,0,0,0.05)' };
 const rankCardStyle = { background: 'white', padding: '15px', borderRadius: '15px', display: 'flex', alignItems: 'center', gap: '15px', marginBottom: '10px', border: '1px solid #f1f5f9', cursor: 'pointer' };
 const catBtnStyle = { padding: '8px 15px', borderRadius: '20px', border: 'none', fontSize: '12px', fontWeight: 'bold', whiteSpace: 'nowrap', cursor: 'pointer' };
-const telemetryCard = { background: '#f8fafc', padding: '10px', borderRadius: '12px', display: 'flex', alignItems: 'center', gap: '8px', border: '1px solid #e2e8f0' };
-const telemetryLabel = { fontSize: '9px', color: '#64748b', fontWeight: 'bold' };
-const telemetryValue = { fontSize: '18px', fontWeight: '900', color: '#1e3a8a' };
-const unitLabel = { fontSize: '10px', color: '#64748b' };
-const floatingBtnStyle = { background: 'white', border: 'none', borderRadius: '15px', width: '50px', height: '50px', display: 'flex', alignItems: 'center', justifyContent: 'center', boxShadow: '0 4px 15px rgba(0,0,0,0.15)', color: '#1e3a8a', cursor: 'pointer', pointerEvents: 'auto' };
-const smallTelemetry = { background: '#f8fafc', padding: '8px 5px', borderRadius: '10px', display: 'flex', alignItems: 'center', gap: '4px', border: '1px solid #e2e8f0', fontSize: '13px' };
+const miniTelemetry = { background: '#f8fafc', padding: '6px', borderRadius: '8px', display: 'flex', alignItems: 'center', gap: '4px', border: '1px solid #e2e8f0', fontSize: '12px' };
+const floatingBtnStyle = { background: 'white', border: 'none', borderRadius: '12px', width: '44px', height: '44px', display: 'flex', alignItems: 'center', justifyContent: 'center', boxShadow: '0 4px 15px rgba(0,0,0,0.15)', color: '#1e3a8a', cursor: 'pointer', pointerEvents: 'auto' };
